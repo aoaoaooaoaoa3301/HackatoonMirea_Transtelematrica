@@ -57,12 +57,15 @@ export function Sidebar() {
     >
       {/* Header */}
       <div className="flex h-14 items-center gap-3 border-b px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold text-sm"
+             style={{ fontFamily: "'Golos Text', system-ui, sans-serif" }}>
           T
         </div>
         {!collapsed && (
           <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-semibold truncate">Транстелематика</span>
+            <span className="text-sm font-semibold truncate" style={{ fontFamily: "'Golos Text', system-ui, sans-serif" }}>
+              Транстелематика
+            </span>
             <span className="text-[10px] text-muted-foreground">Управление задачами</span>
           </div>
         )}
@@ -80,14 +83,18 @@ export function Sidebar() {
               key={item.path}
               to={item.path}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                 collapsed && 'justify-center px-2'
               )}
               title={collapsed ? item.label : undefined}
             >
+              {/* Active indicator bar */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-primary" />
+              )}
               <item.icon className="h-5 w-5 shrink-0" />
               {!collapsed && <span>{item.label}</span>}
             </Link>
@@ -103,12 +110,12 @@ export function Sidebar() {
           <DropdownMenuTrigger asChild>
             <button
               className={cn(
-                'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent transition-colors',
+                'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-secondary transition-colors',
                 collapsed && 'justify-center px-2'
               )}
             >
               <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback className="text-xs bg-primary/10">{initials}</AvatarFallback>
+                <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback>
               </Avatar>
               {!collapsed && user && (
                 <div className="flex flex-col items-start overflow-hidden">

@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// Apply theme before React mounts to avoid flash
+const savedTheme = localStorage.getItem('ttm-theme') || 'dark';
+document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

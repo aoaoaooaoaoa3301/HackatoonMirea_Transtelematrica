@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Search, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
+import { useTheme } from '@/hooks/useTheme';
 
 const pageTitles: Record<string, string> = {
   '/': 'Дашборд',
@@ -17,25 +18,12 @@ const pageTitles: Record<string, string> = {
 
 export function Topbar() {
   const location = useLocation();
-  const [dark, setDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark');
-    }
-    return false;
-  });
+  const { theme, toggle } = useTheme();
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
   const title =
     pageTitles[location.pathname] ??
     (location.pathname.startsWith('/tasks/') ? 'Детали задачи' : 'Страница');
-
-  useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [dark]);
 
   return (
     <>
@@ -59,8 +47,8 @@ export function Topbar() {
           Создать
         </Button>
 
-        <Button variant="ghost" size="icon" onClick={() => setDark(!dark)}>
-          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        <Button variant="ghost" size="icon" onClick={toggle}>
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
       </header>
 
