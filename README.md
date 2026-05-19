@@ -68,22 +68,33 @@
 - Docker + Docker Compose
 - ~10 ГБ свободного места (модель Ollama ~5 ГБ)
 
-### Запуск
+### Запуск (без AI — быстро)
 
 ```bash
 docker compose up -d
 ```
 
 При первом запуске:
-1. Поднимется PostgreSQL
-2. Поднимется Ollama, и сервис `ollama-bootstrap` подтянет модель `qwen2.5:7b` (5–10 минут на хорошем интернете)
-3. Backend применит миграции и засеет демо-данные
-4. Frontend соберётся в nginx
+1. Поднимется PostgreSQL (хост-порт 5433 → контейнер 5432)
+2. Backend применит миграции и засеет демо-данные
+3. Frontend соберётся в nginx
 
 После запуска:
 - **UI:** http://localhost
-- **API:** http://localhost:8000/api
-- **Swagger:** http://localhost:8000/docs
+- **API:** http://localhost:8080/api
+- **Swagger:** http://localhost:8080/docs
+
+AI-функции работают на rule-based фоллбэках и возвращают осмысленные ответы на русском.
+
+### Запуск с локальной LLM (опционально)
+
+```bash
+docker compose --profile ai up -d
+```
+
+Дополнительно поднимется Ollama и `ollama-bootstrap` подтянет модель `qwen2.5:7b` (~4.7 ГБ). После этого AI-эндпоинты пойдут через локальную LLM вместо фоллбэков.
+
+Сменить модель: `OLLAMA_MODEL=qwen2.5:3b docker compose --profile ai up -d`
 
 ### Демо-аккаунты
 

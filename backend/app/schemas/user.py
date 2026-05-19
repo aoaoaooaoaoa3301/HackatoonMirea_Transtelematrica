@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from uuid import UUID
 from typing import Optional, List
 from datetime import datetime
@@ -6,7 +6,7 @@ from app.models.enums import UserRole
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     full_name: str
     password: str
     role: UserRole = UserRole.EMPLOYEE
@@ -18,7 +18,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     role: Optional[UserRole] = None
     department_id: Optional[UUID] = None
     skills: Optional[List[str]] = None
