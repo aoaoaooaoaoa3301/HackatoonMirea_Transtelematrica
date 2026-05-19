@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { LayoutGrid, List, Plus, Inbox, Target, Network } from 'lucide-react';
+import { LayoutGrid, List, Plus, Inbox, Network, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskFilters } from '@/components/tasks/TaskFilters';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { TaskStrategyView } from '@/components/tasks/TaskStrategyView';
+import { TaskGraphView } from '@/components/tasks/TaskGraphView';
 import { getTasks } from '@/api/tasks';
 import type { TaskFilters as TFilters } from '@/types';
 
-type ViewTab = 'strategy' | 'list';
+type ViewTab = 'strategy' | 'graph' | 'list';
 
 export default function TasksPage() {
   const [tab, setTab] = useState<ViewTab>('strategy');
@@ -19,11 +20,11 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Strategy tab always fetches the full set (ignores filters — structure is the value)
+  // Strategy + graph tabs always fetch the full set (ignore filters — structure is the value)
   const { data: allTasks, isLoading: isLoadingAll } = useQuery({
     queryKey: ['tasks', 'all'],
     queryFn: () => getTasks({}),
-    enabled: tab === 'strategy',
+    enabled: tab === 'strategy' || tab === 'graph',
   });
 
   // List tab uses filters
@@ -42,6 +43,10 @@ export default function TasksPage() {
             <TabsTrigger value="strategy" className="gap-2">
               <Network className="h-4 w-4" />
               По целям
+            </TabsTrigger>
+            <TabsTrigger value="graph" className="gap-2">
+              <GitBranch className="h-4 w-4" />
+              Граф
             </TabsTrigger>
             <TabsTrigger value="list" className="gap-2">
               <List className="h-4 w-4" />
@@ -66,6 +71,14 @@ export default function TasksPage() {
             </div>
           )}
           {!isLoadingAll && allTasks && <TaskStrategyView tasks={allTasks} />}
+        </>
+      )}
+
+      {/* Graph view: force-directed, click to expand subtree */}
+      {tab === 'graph' && (
+        <>
+          {isLoadingAll && <Skeleton className="h-[600px] w-full" />}
+          {!isLoadingAll && allTasks && <TaskGraphView tasks={allTasks} />}
         </>
       )}
 
