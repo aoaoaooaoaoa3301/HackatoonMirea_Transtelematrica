@@ -21,8 +21,15 @@ export async function getRisks(params: {
   scope: string;
   id?: string;
 }): Promise<AIRisksResponse> {
-  const res = await apiClient.post<AIRisksResponse>('/ai/risks', params);
-  return res.data;
+  const res = await apiClient.post('/ai/risks', params);
+  const raw = (res.data?.items ?? []) as any[];
+  const items = raw.map((it) => ({
+    task_id: it.task_id,
+    task_title: it.task_title ?? it.title ?? '',
+    risk_level: (it.risk_level === 'med' ? 'medium' : it.risk_level) as 'high' | 'medium',
+    reason: it.reason ?? '',
+  }));
+  return { items };
 }
 
 export async function getOverload(): Promise<{ items: AIOverloadEntry[] }> {
