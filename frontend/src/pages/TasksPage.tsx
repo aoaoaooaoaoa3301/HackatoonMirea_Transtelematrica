@@ -20,14 +20,14 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Strategy + graph tabs always fetch the full set (ignore filters — structure is the value)
+  // Strategy + graph tabs always fetch the full set (ignore filters; structure is the value).
   const { data: allTasks, isLoading: isLoadingAll } = useQuery({
     queryKey: ['tasks', 'all'],
     queryFn: () => getTasks({}),
     enabled: tab === 'strategy' || tab === 'graph',
   });
 
-  // List tab uses filters
+  // List tab uses filters.
   const { data: filteredTasks, isLoading: isLoadingFiltered } = useQuery({
     queryKey: ['tasks', filters],
     queryFn: () => getTasks(filters),
@@ -36,7 +36,6 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <Tabs value={tab} onValueChange={(v) => setTab(v as ViewTab)}>
           <TabsList>
@@ -60,7 +59,6 @@ export default function TasksPage() {
         </Button>
       </div>
 
-      {/* Strategy view: grouped by GOAL with delegation flow */}
       {tab === 'strategy' && (
         <>
           {isLoadingAll && (
@@ -74,7 +72,6 @@ export default function TasksPage() {
         </>
       )}
 
-      {/* Graph view: force-directed, click to expand subtree */}
       {tab === 'graph' && (
         <>
           {isLoadingAll && <Skeleton className="h-[600px] w-full" />}
@@ -82,7 +79,6 @@ export default function TasksPage() {
         </>
       )}
 
-      {/* List view: flat with filters */}
       {tab === 'list' && (
         <>
           <div className="flex items-start justify-between gap-4">
