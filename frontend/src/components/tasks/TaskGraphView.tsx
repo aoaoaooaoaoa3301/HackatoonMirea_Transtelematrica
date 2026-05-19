@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Maximize2, ZoomIn, ZoomOut, RotateCcw, Mail, Phone, X } from 'lucide-react';
+import { Maximize2, ZoomIn, ZoomOut, RotateCcw, Mail, Phone, X, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/statusUtils';
+import { STATUS_LABELS } from '@/lib/statusUtils';
 import type { Task, TaskType, Status } from '@/types';
 
 // ──────────────────────── layout constants ────────────────────────
@@ -151,9 +152,12 @@ interface CardProps {
   isExpanded: boolean;
   isInChain: boolean;
   isSelected: boolean;
+  isHovered: boolean;
   isDimmed: boolean;
+  appearDelay: number;
   onToggle: () => void;
   onSelect: () => void;
+  onHover: (id: string | null) => void;
 }
 
 function TaskNodeCard({
@@ -162,9 +166,12 @@ function TaskNodeCard({
   isExpanded,
   isInChain,
   isSelected,
+  isHovered,
   isDimmed,
+  appearDelay,
   onToggle,
   onSelect,
+  onHover,
 }: CardProps) {
   const task = placed.task;
   const navigate = useNavigate();
@@ -183,20 +190,28 @@ function TaskNodeCard({
     >
       <div
         data-node-id={task.id}
-        className="rounded-lg border bg-card transition-all"
+        className="rounded-lg border bg-card"
         style={{
           width: CARD_WIDTH,
           height: CARD_HEIGHT,
           borderLeftWidth: 3,
           borderLeftColor: accent,
+          background: `linear-gradient(135deg, ${accent}0F 0%, hsl(var(--card)) 55%)`,
           boxShadow: isSelected
-            ? `0 0 0 2px ${accent}, 0 4px 14px rgba(0,0,0,0.25)`
+            ? `0 0 0 2px ${accent}, 0 10px 28px ${accent}60`
+            : isHovered
+            ? `0 0 0 2px ${accent}, 0 8px 22px ${accent}50`
             : isInChain
-            ? `0 0 0 1.5px ${accent}80`
+            ? `0 0 0 1.5px ${accent}, 0 4px 12px ${accent}30`
             : '0 1px 2px rgba(0,0,0,0.18)',
-          opacity: isDimmed ? 0.32 : 1,
+          opacity: isDimmed ? 0.18 : 1,
           cursor: 'pointer',
+          transform: isHovered || isSelected ? 'translateY(-2px)' : 'translateY(0)',
+          transition: `transform 180ms cubic-bezier(.2,.7,.3,1), box-shadow 200ms ease, opacity 200ms ease, background 200ms ease`,
+          animation: `ttm-card-in 320ms cubic-bezier(.2,.7,.3,1) ${appearDelay}ms both`,
         }}
+        onMouseEnter={() => onHover(task.id)}
+        onMouseLeave={() => onHover(null)}
         onClick={(e) => {
           e.stopPropagation();
           onSelect();
@@ -348,6 +363,8 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
     return new Set(tasks.filter((t) => t.type === 'GOAL').map((t) => t.id));
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [searchQ, setSearchQ] = useState('');
 
   // Pan + zoom
   const [transform, setTransform] = useState({ x: 20, y: 12, k: 0.85 });
@@ -416,11 +433,26 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
     return out;
   }, [placedList, placed]);
 
-  // Highlighted chain (ancestors of selected)
+  // Highlighted chain (ancestors of selected, OR hovered if nothing selected).
+  // This means a viewer can simply mouse-over a card to instantly see the
+  // chain of responsibility up to the strategic goal — no click required.
+  const activeId = selectedId ?? hoveredId;
   const chain = useMemo(() => {
-    if (!selectedId) return new Set<string>();
-    return parentChainOf(selectedId);
-  }, [selectedId, parentChainOf]);
+    if (!activeId) return new Set<string>();
+    return parentChainOf(activeId);
+  }, [activeId, parentChainOf]);
+
+  // Search-filtered ID set: cards whose title matches the query are pulled
+  // forward, others fade. Empty query = nothing dimmed.
+  const searchMatchIds = useMemo(() => {
+    const q = searchQ.trim().toLowerCase();
+    if (!q) return null;
+    const matches = new Set<string>();
+    placedList.forEach((p) => {
+      if (p.task.title.toLowerCase().includes(q)) matches.add(p.task.id);
+    });
+    return matches;
+  }, [searchQ, placedList]);
 
   // Content bounds for fit-to-view
   const contentBounds = useMemo(() => {
@@ -565,7 +597,7 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
       </div>
 
       {/* Toolbar */}
-      <div className="absolute top-[58px] left-3 z-10 flex gap-2 flex-wrap">
+      <div className="absolute top-[58px] left-3 z-10 flex gap-2 flex-wrap items-center">
         <Button size="sm" variant="secondary" onClick={expandAll}>
           Раскрыть всё
         </Button>
@@ -585,6 +617,29 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
             <ZoomIn className="h-3 w-3" />
           </Button>
         </div>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Найти задачу…"
+            className="h-9 pl-7 pr-7 w-52 text-xs"
+          />
+          {searchQ && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setSearchQ('')}
+              aria-label="Очистить"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+        {searchMatchIds && (
+          <span className="text-[10px] text-muted-foreground">
+            найдено: {searchMatchIds.size}
+          </span>
+        )}
       </div>
 
       {/* Selected → breadcrumb chain banner */}
@@ -631,8 +686,22 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
       )}
 
       <div className="absolute bottom-3 right-3 z-10 text-[10px] text-muted-foreground bg-background/80 backdrop-blur rounded px-2 py-1 pointer-events-none">
-        Клик — выделить цепочку · Двойной клик — карточка задачи · Колесо — масштаб
+        Наведи — увидеть цепочку · Клик — закрепить · Двойной клик — карточка задачи
       </div>
+
+      {/* Animations — declared once, used by every card via inline animation */}
+      <style>
+        {`
+          @keyframes ttm-card-in {
+            from { opacity: 0; transform: translateY(8px) scale(0.96); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @keyframes ttm-pulse-ring {
+            0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+            50%      { box-shadow: 0 0 0 6px transparent; }
+          }
+        `}
+      </style>
 
       {/* SVG canvas — pan/zoom is applied via transform */}
       <svg
@@ -680,37 +749,74 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
           <g style={{ pointerEvents: 'none' }}>
             {edges.map(({ src, dst }, i) => {
               const isChain = chain.has(src.task.id) && chain.has(dst.task.id);
-              const isDimmed = selectedId !== null && !isChain;
+              const filterFade =
+                searchMatchIds !== null &&
+                !searchMatchIds.has(src.task.id) &&
+                !searchMatchIds.has(dst.task.id);
+              const isDimmed = (activeId !== null && !isChain) || filterFade;
+              const edgeKey = `${src.task.id}-${dst.task.id}`;
+              const stroke = isChain ? TYPE_ACCENT[src.task.type] : 'rgba(148,163,184,0.5)';
               return (
-                <path
-                  key={`e-${src.task.id}-${dst.task.id}-${i}`}
-                  d={bezierEdge(src, dst)}
-                  fill="none"
-                  stroke={isChain ? TYPE_ACCENT[src.task.type] : 'rgba(148,163,184,0.5)'}
-                  strokeWidth={isChain ? 2.2 : 1.4}
-                  opacity={isDimmed ? 0.18 : 1}
-                  style={{ transition: 'all 250ms ease' }}
-                />
+                <g key={`e-${edgeKey}-${i}`}>
+                  <path
+                    d={bezierEdge(src, dst)}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={isChain ? 2.2 : 1.4}
+                    opacity={isDimmed ? 0.16 : 1}
+                    style={{ transition: 'all 250ms ease' }}
+                  />
+                  {/* Flow particles — only on edges that are part of the
+                      currently highlighted chain. Two staggered dots run
+                      from parent to child to convey "responsibility flows
+                      from goal down to subtask". */}
+                  {isChain && (
+                    <>
+                      <circle r={2.6} fill={stroke}>
+                        <animateMotion
+                          dur="1.6s"
+                          repeatCount="indefinite"
+                          rotate="auto"
+                          path={bezierEdge(src, dst)}
+                        />
+                      </circle>
+                      <circle r={2} fill={stroke} opacity={0.55}>
+                        <animateMotion
+                          dur="1.6s"
+                          repeatCount="indefinite"
+                          begin="0.55s"
+                          rotate="auto"
+                          path={bezierEdge(src, dst)}
+                        />
+                      </circle>
+                    </>
+                  )}
+                </g>
               );
             })}
           </g>
 
           {/* Cards */}
           <g>
-            {placedList.map((p) => {
+            {placedList.map((p, idx) => {
               const inChain = chain.has(p.task.id);
-              const isDimmed = selectedId !== null && !inChain;
+              const matched = searchMatchIds?.has(p.task.id) ?? null;
+              const filterFade = matched === false;
+              const isDimmed = (activeId !== null && !inChain) || filterFade;
               return (
                 <TaskNodeCard
                   key={p.task.id}
                   placed={p}
                   hasChildren={hasChildrenOf(p.task.id)}
                   isExpanded={expanded.has(p.task.id)}
-                  isInChain={inChain && p.task.id !== selectedId}
+                  isInChain={inChain && p.task.id !== selectedId && p.task.id !== hoveredId}
                   isSelected={p.task.id === selectedId}
+                  isHovered={p.task.id === hoveredId}
                   isDimmed={isDimmed}
+                  appearDelay={Math.min(idx * 30, 360)}
                   onToggle={() => toggleNode(p.task.id)}
                   onSelect={() => setSelectedId((cur) => (cur === p.task.id ? null : p.task.id))}
+                  onHover={setHoveredId}
                 />
               );
             })}
