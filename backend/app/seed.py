@@ -197,7 +197,7 @@ def run_seed():
             created_by=user_ids["admin"],
         )
         t7 = mk_task("7",
-            type=TaskType.TASK, title="Сертификация комплекса по 287-ФЗ",
+            type=TaskType.EPIC, title="Сертификация комплекса по 287-ФЗ",
             description="Прохождение сертификации соответствия требованиям 287-ФЗ «О национальной системе пространственных данных».",
             parent_id=t1,
             assignee_id=user_ids["lead.prod"],

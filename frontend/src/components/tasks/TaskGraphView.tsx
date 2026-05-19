@@ -1,12 +1,17 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Maximize2, ZoomIn, ZoomOut, RotateCcw, Mail, Phone, X, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Maximize2, ZoomIn, ZoomOut, RotateCcw, Mail, Phone, X, Search, Send, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { STATUS_LABELS } from '@/lib/statusUtils';
+import { getTask, addComment } from '@/api/tasks';
+import { useAuthStore } from '@/store/authStore';
 import type { Task, TaskType, Status } from '@/types';
 
 // ──────────────────────── layout constants ────────────────────────
@@ -376,12 +381,46 @@ function TaskOverviewPanel({
   const accent = TYPE_ACCENT[task.type];
   const statusColor = STATUS_DOT[task.status];
   const ancestors = chain.filter((t) => t.id !== task.id);
+  const currentUser = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
+  const [commentBody, setCommentBody] = useState('');
+  const commentsScrollRef = useRef<HTMLDivElement>(null);
+
+  // Fetch full task detail (includes comments + history) when this
+  // panel mounts or the selected task changes.
+  const { data: detail, isLoading: detailLoading } = useQuery({
+    queryKey: ['task-detail', task.id],
+    queryFn: () => getTask(task.id),
+  });
+
+  const postComment = useMutation({
+    mutationFn: (body: string) => addComment(task.id, body),
+    onSuccess: () => {
+      setCommentBody('');
+      qc.invalidateQueries({ queryKey: ['task-detail', task.id] });
+      // scroll to bottom of comments after refetch
+      setTimeout(() => {
+        commentsScrollRef.current?.scrollTo({
+          top: commentsScrollRef.current.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 250);
+    },
+  });
+
+  const comments = detail?.comments ?? [];
 
   const daysLeft = task.due_date
     ? Math.ceil(
         (new Date(task.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
     : null;
+
+  const submitComment = () => {
+    const body = commentBody.trim();
+    if (!body || postComment.isPending) return;
+    postComment.mutate(body);
+  };
 
   return (
     <div
@@ -582,6 +621,105 @@ function TaskOverviewPanel({
             </div>
           </div>
         )}
+
+        {/* Comments thread */}
+        <div>
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+            <MessageSquare className="h-3 w-3" />
+            <span>Обсуждение{detail ? ` (${comments.length})` : ''}</span>
+          </div>
+
+          <div
+            ref={commentsScrollRef}
+            className="max-h-72 overflow-y-auto pr-1 space-y-2"
+          >
+            {detailLoading && (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-3/4" />
+              </div>
+            )}
+
+            {!detailLoading && comments.length === 0 && (
+              <div className="text-xs text-muted-foreground italic py-2">
+                Пока никто не написал. Будь первым — задай вопрос или
+                поделись статусом.
+              </div>
+            )}
+
+            {!detailLoading &&
+              comments.map((c) => {
+                const isMine = currentUser?.id === c.author_id;
+                const authorName =
+                  c.author?.full_name ??
+                  (isMine ? currentUser?.full_name : null) ??
+                  'Сотрудник';
+                const time = new Date(c.created_at).toLocaleString('ru-RU', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                return (
+                  <div
+                    key={c.id}
+                    className="text-xs rounded-md border bg-card/60 p-2"
+                    style={{
+                      borderLeft: `2px solid ${isMine ? accent : '#64748B'}`,
+                      animation: 'ttm-comment-in 240ms ease both',
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Avatar className="h-4 w-4">
+                        <AvatarFallback
+                          className="text-[8px] font-medium"
+                          style={{
+                            backgroundColor: isMine ? `${accent}30` : '#64748B30',
+                            color: isMine ? accent : '#64748B',
+                          }}
+                        >
+                          {initials(authorName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium truncate">{authorName}</span>
+                      <span className="text-muted-foreground text-[10px] ml-auto shrink-0">
+                        {time}
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed whitespace-pre-wrap break-words">
+                      {c.body}
+                    </p>
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Composer */}
+          <div className="mt-2 flex gap-1 items-end">
+            <Textarea
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submitComment();
+                }
+              }}
+              placeholder="Написать сообщение… (Cmd+Enter)"
+              rows={2}
+              className="text-xs resize-none min-h-[44px]"
+            />
+            <Button
+              size="icon"
+              className="shrink-0 h-9 w-9"
+              disabled={!commentBody.trim() || postComment.isPending}
+              onClick={submitComment}
+              aria-label="Отправить"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Footer */}
@@ -1034,6 +1172,10 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
           @keyframes ttm-panel-in {
             from { opacity: 0; transform: translateX(12px); }
             to   { opacity: 1; transform: translateX(0); }
+          }
+          @keyframes ttm-comment-in {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
           }
         `}
       </style>
