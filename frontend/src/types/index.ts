@@ -35,8 +35,12 @@ export interface Task {
   status: Status;
   progress: number;
   assigned_department_id: string | null;
+  assigned_department_name?: string | null;
   assignee_id: string | null;
+  assignee_name?: string | null;
   created_by_id: string;
+  created_by_name?: string | null;
+  children_count?: number;
   created_at: string;
   updated_at: string;
   assignee?: User;
