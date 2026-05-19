@@ -8,7 +8,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440
     OLLAMA_URL: str = "http://ollama:11434"
-    OLLAMA_MODEL: str = "qwen2.5:7b"
+    OLLAMA_MODEL: str = "ai/gemma4:E4B"
+    LLM_PROVIDER: str = "docker_model"
+    DOCKER_MODEL_URL: str = "http://model-runner.docker.internal"
     OLLAMA_TIMEOUT: int = 30
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 

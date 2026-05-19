@@ -54,7 +54,7 @@
                                 ▼                ▼
                        ┌──────────────┐  ┌─────────────────┐
                        │ PostgreSQL   │  │ Ollama          │
-                       │ 16           │  │ qwen2.5:7b      │
+                       │ 16           │  │ gemma4:e4b      │
                        └──────────────┘  └─────────────────┘
 ```
 
@@ -100,11 +100,11 @@ AI-функции работают на rule-based фоллбэках и воз�
 docker compose --profile ai up -d
 ```
 
-Дополнительно поднимется Ollama и `ollama-bootstrap` скачает `qwen2.5:7b` (~4.7 ГБ, 5-15 минут на средне-быстром интернете). После этого AI-эндпоинты пойдут через локальную LLM.
+Дополнительно поднимется Ollama и `ollama-bootstrap` проверит/скачает `gemma4:e4b`. После этого AI-эндпоинты пойдут через локальную LLM.
 
 Сменить модель:
 ```bash
-OLLAMA_MODEL=qwen2.5:3b docker compose --profile ai up -d  # 1.9 ГБ, быстрее
+OLLAMA_MODEL=gemma4:e4b docker compose --profile ai up -d
 ```
 
 ### Демо-аккаунты
@@ -243,7 +243,7 @@ npm run dev  # http://localhost:5173, проксирует /api на :8000
 |---|---|
 | Развёртывание | Полностью on-premise через `docker compose up`. Любой Linux-сервер с Docker. |
 | Хранение данных | Только в локальной PostgreSQL. Никакой передачи во внешние сервисы. |
-| AI | Локальная модель через **Ollama** (qwen2.5:7b или любая другая). Работает offline. |
+| AI | Локальная модель через **Ollama** (gemma4:e4b или любая другая). Работает offline. |
 | Зависимости | **Только open-source**: PostgreSQL, FastAPI, React, Ollama, Nginx. |
 | Платные SaaS | **Ноль обязательных**. Опционально можно подключить YandexGPT/GigaChat через тот же интерфейс `LLMProvider`. |
 | Доступ | JWT + RBAC, 3 роли с разграничением по отделам. |

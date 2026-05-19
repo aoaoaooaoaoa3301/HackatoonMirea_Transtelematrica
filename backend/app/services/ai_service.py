@@ -1,6 +1,6 @@
-"""AI service: Ollama LLM client with rule-based fallbacks.
+"""AI service: local LLM client with rule-based fallbacks.
 
-All public functions return deterministic results even when Ollama is unavailable.
+All public functions return deterministic results even when the LLM is unavailable.
 """
 import json
 import re
@@ -22,13 +22,30 @@ from app.services.task_service import compute_user_workload, compute_period_buck
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Ollama client
+# LLM client
 # ---------------------------------------------------------------------------
 
-async def _ask_ollama(prompt: str, system: str = "") -> Optional[str]:
-    """Call Ollama generate API. Returns text or None on any failure."""
+async def _ask_llm(prompt: str, system: str = "") -> Optional[str]:
+    """Call the configured local LLM. Returns text or None on any failure."""
     try:
         async with httpx.AsyncClient(timeout=settings.OLLAMA_TIMEOUT) as client:
+            if settings.LLM_PROVIDER == "docker_model":
+                messages = []
+                if system:
+                    messages.append({"role": "system", "content": system})
+                messages.append({"role": "user", "content": prompt})
+                resp = await client.post(
+                    f"{settings.DOCKER_MODEL_URL}/v1/chat/completions",
+                    json={"model": settings.OLLAMA_MODEL, "messages": messages, "stream": False},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices") or []
+                    if choices:
+                        return choices[0].get("message", {}).get("content", "").strip()
+                logger.warning("Docker Model Runner returned status %d: %s", resp.status_code, resp.text[:500])
+                return None
+
             body = {
                 "model": settings.OLLAMA_MODEL,
                 "prompt": prompt,
@@ -39,9 +56,9 @@ async def _ask_ollama(prompt: str, system: str = "") -> Optional[str]:
             if resp.status_code == 200:
                 data = resp.json()
                 return data.get("response", "").strip()
-            logger.warning("Ollama returned status %d", resp.status_code)
+            logger.warning("Ollama returned status %d: %s", resp.status_code, resp.text[:500])
     except Exception as e:
-        logger.warning("Ollama call failed: %s", e)
+        logger.warning("LLM call failed: %s", e)
     return None
 
 
@@ -101,7 +118,7 @@ async def digest(db: Session, scope: str, scope_id: Optional[UUID], period: str 
         "Отвечай только на русском. Формат JSON: {{\"summary\": \"...\", \"key_points\": [\"...\"]}}."
     )
     system = "Ты ассистент руководителя в системе управления задачами. Отвечай кратко и по делу на русском."
-    llm = await _ask_ollama(prompt, system)
+    llm = await _ask_llm(prompt, system)
 
     if llm:
         try:
@@ -178,7 +195,7 @@ async def risks(db: Session, scope: str, scope_id: Optional[UUID]) -> dict:
             f"Для каждой задачи ниже дай краткое пояснение риска на русском (1 предложение):\n{task_lines}\n"
             "Формат JSON: [{\"title\": \"...\", \"reason\": \"...\"}]"
         )
-        llm = await _ask_ollama(prompt)
+        llm = await _ask_llm(prompt)
         if llm:
             try:
                 enriched = json.loads(llm)
@@ -229,7 +246,7 @@ async def overload(db: Session) -> dict:
             f"Для каждого сотрудника дай краткую рекомендацию на русском:\n{lines}\n"
             "Формат JSON: [{{\"full_name\": \"...\", \"suggestion\": \"...\"}}]"
         )
-        llm = await _ask_ollama(prompt)
+        llm = await _ask_llm(prompt)
         if llm:
             try:
                 enriched = json.loads(llm)
@@ -255,7 +272,7 @@ async def parse_task(text: str) -> dict:
         "\"assignee_suggestion\": \"имя или null\", \"type\": \"GOAL|EPIC|TASK|SUBTASK\"}\n"
         "Отвечай только JSON."
     )
-    llm = await _ask_ollama(prompt)
+    llm = await _ask_llm(prompt)
     if llm:
         try:
             parsed = json.loads(llm)
@@ -399,7 +416,7 @@ async def suggest_assignee(
             "Для каждого кандидата дай краткое обоснование (1 предложение) на русском.\n"
             "Формат JSON: [{{\"full_name\": \"...\", \"reason\": \"...\"}}]"
         )
-        llm = await _ask_ollama(prompt)
+        llm = await _ask_llm(prompt)
         if llm:
             try:
                 enriched = json.loads(llm)
@@ -443,7 +460,7 @@ async def chat(db: Session, message: str, context: Optional[dict] = None) -> dic
     if context_text:
         prompt = context_text + "\n\nВопрос пользователя: " + message
 
-    llm = await _ask_ollama(prompt, system)
+    llm = await _ask_llm(prompt, system)
     if llm:
         return {"reply": llm}
 
@@ -454,6 +471,355 @@ async def chat(db: Session, message: str, context: Optional[dict] = None) -> dic
             "Попробуйте переформулировать вопрос или обратитесь позже."
         )
     }
+
+
+# Context-aware chat implementation. Defined after the legacy chat function so
+# this name is the one exported by the module.
+
+def _chat_scope(db: Session, context: Optional[dict], current_user: Optional[User]) -> tuple[str, Optional[UUID], str]:
+    department_id = UUID(str(context["department_id"])) if context and context.get("department_id") else None
+    if department_id:
+        dept = db.get(Department, department_id)
+        return "department", department_id, f"отдел {dept.name}" if dept else "отдел"
+    if current_user and current_user.department_id:
+        dept = db.get(Department, current_user.department_id)
+        return "department", current_user.department_id, f"моя команда ({dept.name})" if dept else "моя команда"
+    return "all", None, "вся компания"
+
+
+def _scoped_tasks(db: Session, scope: str, scope_id: Optional[UUID]) -> List[Task]:
+    query = db.query(Task)
+    if scope == "department" and scope_id:
+        query = query.filter(Task.assigned_department_id == scope_id)
+    return query.all()
+
+
+def _task_line(task: Task) -> str:
+    assignee = task.assignee.full_name if task.assignee else "не назначен"
+    due = task.due_date.isoformat() if task.due_date else "без срока"
+    return (
+        f"- {task.title}: {task.status.value}, прогресс {task.progress}%, "
+        f"приоритет {task.priority.value}, срок {due}, исполнитель {assignee}"
+    )
+
+
+def _chat_digest_response(tasks: List[Task], scope_label: str) -> str:
+    total = len(tasks)
+    active = [t for t in tasks if t.status != TaskStatus.DONE]
+    done = [t for t in tasks if t.status == TaskStatus.DONE]
+    today = date.today()
+    overdue = [t for t in active if t.status == TaskStatus.OVERDUE or (t.due_date and t.due_date < today)]
+    risk = [t for t in active if t.due_date and 0 <= (t.due_date - today).days <= 7]
+    critical = [t for t in active if t.priority in (TaskPriority.HIGH, TaskPriority.CRITICAL)]
+    focus = sorted(
+        set(overdue + risk + critical),
+        key=lambda t: (0 if t in overdue else 1, t.due_date or date.max, -PRIORITY_WEIGHT.get(t.priority, 0)),
+    )[:6]
+
+    lines = [
+        f"Сводка по области: {scope_label}.",
+        f"Всего задач: {total}. Активных: {len(active)}. Завершено: {len(done)}.",
+        f"Просрочено: {len(overdue)}. В зоне риска на ближайшие 7 дней: {len(risk)}. Высокий/критический приоритет: {len(critical)}.",
+    ]
+    if focus:
+        lines.append("\nЧто требует внимания:")
+        lines.extend(_task_line(t) for t in focus)
+    else:
+        lines.append("\nКритичных задач для немедленного внимания не найдено.")
+    return "\n".join(lines)
+
+
+def _chat_risks_response(tasks: List[Task], scope_label: str) -> str:
+    today = date.today()
+    risk_rows = []
+    for task in tasks:
+        if task.status == TaskStatus.DONE or not task.due_date:
+            continue
+        days_left = (task.due_date - today).days
+        if task.status == TaskStatus.OVERDUE or days_left < 0:
+            level = "высокий"
+            reason = f"просрочена на {abs(days_left)} дн."
+        elif days_left <= 3:
+            level = "высокий"
+            reason = f"до срока {days_left} дн."
+        elif days_left <= 7:
+            level = "средний"
+            reason = f"до срока {days_left} дн."
+        else:
+            continue
+        risk_rows.append((level, days_left, task, reason))
+
+    risk_rows.sort(key=lambda r: (0 if r[0] == "высокий" else 1, r[1], -PRIORITY_WEIGHT.get(r[2].priority, 0)))
+    if not risk_rows:
+        return f"По области «{scope_label}» задач в зоне риска не найдено."
+
+    lines = [f"Задачи в зоне риска по области: {scope_label}."]
+    for level, _, task, reason in risk_rows[:10]:
+        assignee = task.assignee.full_name if task.assignee else "не назначен"
+        lines.append(
+            f"- [{level}] {task.title}: {reason}, статус {task.status.value}, "
+            f"прогресс {task.progress}%, исполнитель {assignee}."
+        )
+    return "\n".join(lines)
+
+
+def _chat_overload_response(db: Session, scope: str, scope_id: Optional[UUID], scope_label: str) -> str:
+    query = db.query(User).filter(User.active == True)
+    if scope == "department" and scope_id:
+        query = query.filter(User.department_id == scope_id)
+    users = query.all()
+    rows = []
+    for user in users:
+        workload = compute_user_workload(db, user.id)
+        rows.append((workload["capacity_util"], user, workload))
+    rows.sort(key=lambda row: row[0], reverse=True)
+
+    if not rows:
+        return f"По области «{scope_label}» сотрудников не найдено."
+
+    lines = [f"Сотрудники с наибольшей загрузкой по области: {scope_label}."]
+    for util, user, workload in rows[:8]:
+        status = "перегруз" if util > 120 else "риск перегруза" if util > 80 else "норма"
+        lines.append(
+            f"- {user.full_name}: {util:.0f}% ({status}), открытых задач: {workload['open_tasks']}, "
+            f"просрочено: {workload['overdue_count']}, в риске: {workload['at_risk_count']}."
+        )
+    return "\n".join(lines)
+
+
+def _chat_context_text(tasks: List[Task], scope_label: str) -> str:
+    today = date.today()
+    active = [t for t in tasks if t.status != TaskStatus.DONE]
+    due_soon = [t for t in active if t.due_date and (t.due_date < today or 0 <= (t.due_date - today).days <= 14)]
+    high_priority = [t for t in active if t.priority in (TaskPriority.HIGH, TaskPriority.CRITICAL)]
+    sample = sorted(
+        set(due_soon + high_priority),
+        key=lambda t: (t.due_date or date.max, -PRIORITY_WEIGHT.get(t.priority, 0)),
+    )[:20]
+
+    status_counts = {}
+    for task in tasks:
+        status_counts[task.status.value] = status_counts.get(task.status.value, 0) + 1
+
+    lines = [
+        f"Область анализа: {scope_label}.",
+        "Сводка по статусам: " + ", ".join(f"{k}: {v}" for k, v in status_counts.items()),
+        "Задачи для анализа:",
+    ]
+    lines.extend(_task_line(t) for t in sample)
+    return "\n".join(lines)
+
+
+async def chat(db: Session, message: str, context: Optional[dict] = None, current_user: Optional[User] = None) -> dict:
+    system = (
+        "Ты ассистент руководителя в системе управления задачами Транстелематика. "
+        "Отвечай кратко, по делу и только на основе переданного контекста задач. "
+        "Если данных недостаточно, прямо скажи, каких данных не хватает."
+    )
+
+    scope, scope_id, scope_label = _chat_scope(db, context, current_user)
+    message_lower = message.lower()
+
+    if any(word in message_lower for word in ("перегруж", "загруз", "нагруз")):
+        return {"reply": _chat_overload_response(db, scope, scope_id, scope_label)}
+
+    tasks = _scoped_tasks(db, scope, scope_id)
+
+    if any(word in message_lower for word in ("риск", "риска", "риске", "просроч")):
+        return {"reply": _chat_risks_response(tasks, scope_label)}
+
+    if any(word in message_lower for word in ("сводк", "отчет", "отчёт", "дайджест", "недел")):
+        return {"reply": _chat_digest_response(tasks, scope_label)}
+
+    context_text = _chat_context_text(tasks, scope_label)
+    if context and context.get("task_id"):
+        task = db.get(Task, UUID(str(context["task_id"])))
+        if task:
+            context_text += (
+                f"\nКонтекст выбранной задачи: \"{task.title}\", статус: {task.status.value}, "
+                f"прогресс: {task.progress}%, приоритет: {task.priority.value}."
+            )
+
+    prompt = context_text + "\n\nВопрос пользователя: " + message
+    llm = await _ask_llm(prompt, system)
+    if llm:
+        return {"reply": llm}
+
+    return {
+        "reply": "AI-модель не ответила. Но данные проекта доступны: попробуйте спросить про сводку, риски или загрузку команды."
+    }
+
+
+# Final chat formatter. Kept near the end so it overrides the earlier chat
+# implementation while preserving the rest of the AI service functions.
+
+STATUS_LABELS = {
+    TaskStatus.NEW: "Новая",
+    TaskStatus.IN_PROGRESS: "В работе",
+    TaskStatus.REVIEW: "На проверке",
+    TaskStatus.DONE: "Готово",
+    TaskStatus.OVERDUE: "Просрочена",
+}
+
+PRIORITY_LABELS = {
+    TaskPriority.LOW: "низкий",
+    TaskPriority.MEDIUM: "средний",
+    TaskPriority.HIGH: "высокий",
+    TaskPriority.CRITICAL: "критический",
+}
+
+
+def _display_name(user: Optional[User]) -> str:
+    if not user or not user.full_name or "?" in user.full_name:
+        return "не назначен"
+    return user.full_name
+
+
+def _status_label(status: TaskStatus) -> str:
+    return STATUS_LABELS.get(status, status.value)
+
+
+def _priority_label(priority: TaskPriority) -> str:
+    return PRIORITY_LABELS.get(priority, priority.value.lower())
+
+
+def _task_md(task: Task, note: str) -> str:
+    due = task.due_date.strftime("%d.%m.%Y") if task.due_date else "без срока"
+    return "\n".join([
+        f"**{task.title}**",
+        f"- Причина: {note}",
+        f"- Статус: {_status_label(task.status)}, прогресс {task.progress}%",
+        f"- Приоритет: {_priority_label(task.priority)}, срок: {due}",
+        f"- Исполнитель: {_display_name(task.assignee)}",
+    ])
+
+
+def _final_chat_digest(tasks: List[Task], scope_label: str) -> str:
+    today = date.today()
+    active = [t for t in tasks if t.status != TaskStatus.DONE]
+    done = [t for t in tasks if t.status == TaskStatus.DONE]
+    overdue = [t for t in active if t.status == TaskStatus.OVERDUE or (t.due_date and t.due_date < today)]
+    risk = [t for t in active if t.due_date and 0 <= (t.due_date - today).days <= 7]
+    critical = [t for t in active if t.priority in (TaskPriority.HIGH, TaskPriority.CRITICAL)]
+    focus = sorted(
+        set(overdue + risk + critical),
+        key=lambda t: (0 if t in overdue else 1, t.due_date or date.max, -PRIORITY_WEIGHT.get(t.priority, 0)),
+    )[:5]
+
+    lines = [
+        "## Сводка по задачам",
+        f"**Область:** {scope_label}",
+        "",
+        f"- Всего задач: **{len(tasks)}**",
+        f"- Активных: **{len(active)}**",
+        f"- Завершено: **{len(done)}**",
+        f"- Просрочено: **{len(overdue)}**",
+        f"- В зоне риска на 7 дней: **{len(risk)}**",
+        f"- Высокий или критический приоритет: **{len(critical)}**",
+    ]
+    if focus:
+        lines.extend(["", "### Что требует внимания"])
+        for index, task in enumerate(focus, 1):
+            if task in overdue:
+                note = "просрочена"
+            elif task in risk:
+                days = (task.due_date - today).days if task.due_date else 0
+                note = f"до срока {days} дн."
+            else:
+                note = "высокий приоритет"
+            lines.extend(["", f"{index}. {_task_md(task, note)}"])
+    return "\n".join(lines)
+
+
+def _final_chat_risks(tasks: List[Task], scope_label: str) -> str:
+    today = date.today()
+    rows = []
+    for task in tasks:
+        if task.status == TaskStatus.DONE or not task.due_date:
+            continue
+        days_left = (task.due_date - today).days
+        if task.status == TaskStatus.OVERDUE or days_left < 0:
+            level = "высокий"
+            note = f"просрочена на {abs(days_left)} дн."
+        elif days_left <= 3:
+            level = "высокий"
+            note = f"до срока {days_left} дн."
+        elif days_left <= 7:
+            level = "средний"
+            note = f"до срока {days_left} дн."
+        else:
+            continue
+        rows.append((level, days_left, task, note))
+
+    rows.sort(key=lambda row: (0 if row[0] == "высокий" else 1, row[1], -PRIORITY_WEIGHT.get(row[2].priority, 0)))
+    if not rows:
+        return f"## Задачи в зоне риска\n\n**Область:** {scope_label}\n\nЗадач в зоне риска не найдено."
+
+    lines = [
+        "## Задачи в зоне риска",
+        f"**Область:** {scope_label}",
+        "",
+        f"Найдено задач: **{len(rows)}**. Ниже самые срочные.",
+    ]
+    for index, (level, _, task, note) in enumerate(rows[:8], 1):
+        lines.extend(["", f"{index}. **Риск: {level}**", _task_md(task, note)])
+    return "\n".join(lines)
+
+
+def _final_chat_overload(db: Session, scope: str, scope_id: Optional[UUID], scope_label: str) -> str:
+    query = db.query(User).filter(User.active == True)
+    if scope == "department" and scope_id:
+        query = query.filter(User.department_id == scope_id)
+    rows = []
+    for user in query.all():
+        workload = compute_user_workload(db, user.id)
+        rows.append((workload["capacity_util"], user, workload))
+    rows.sort(key=lambda row: row[0], reverse=True)
+
+    lines = [
+        "## Загрузка сотрудников",
+        f"**Область:** {scope_label}",
+        "",
+    ]
+    if not rows:
+        lines.append("Сотрудников в выбранной области не найдено.")
+        return "\n".join(lines)
+
+    for index, (util, user, workload) in enumerate(rows[:8], 1):
+        status = "перегруз" if util > 120 else "риск перегруза" if util > 80 else "норма"
+        lines.extend([
+            f"{index}. **{_display_name(user)}**",
+            f"   - Загрузка: **{util:.0f}%** ({status})",
+            f"   - Открытых задач: {workload['open_tasks']}",
+            f"   - Просрочено: {workload['overdue_count']}",
+            f"   - В зоне риска: {workload['at_risk_count']}",
+        ])
+    return "\n".join(lines)
+
+
+async def chat(db: Session, message: str, context: Optional[dict] = None, current_user: Optional[User] = None) -> dict:
+    scope, scope_id, scope_label = _chat_scope(db, context, current_user)
+    message_lower = message.lower()
+
+    if any(word in message_lower for word in ("перегруж", "загруз", "нагруз")):
+        return {"reply": _final_chat_overload(db, scope, scope_id, scope_label)}
+
+    tasks = _scoped_tasks(db, scope, scope_id)
+
+    if any(word in message_lower for word in ("риск", "риска", "риске", "просроч")):
+        return {"reply": _final_chat_risks(tasks, scope_label)}
+
+    if any(word in message_lower for word in ("сводк", "отчет", "отчёт", "дайджест", "недел")):
+        return {"reply": _final_chat_digest(tasks, scope_label)}
+
+    system = (
+        "Ты ассистент руководителя в системе управления задачами Транстелематика. "
+        "Отвечай в Markdown: короткий заголовок, затем 3-6 пунктов. "
+        "Используй только переданный контекст задач."
+    )
+    prompt = _chat_context_text(tasks, scope_label) + "\n\nВопрос пользователя: " + message
+    llm = await _ask_llm(prompt, system)
+    return {"reply": llm or "Не удалось получить ответ модели. Попробуйте спросить про сводку, риски или загрузку команды."}
 
 
 # ---------------------------------------------------------------------------
@@ -517,7 +883,7 @@ async def goal_summary(db: Session, goal_id: UUID) -> dict:
         f"Подзадачи:\n{task_lines}\n"
         "Дай краткое резюме по достижению цели (2-3 предложения) на русском."
     )
-    llm = await _ask_ollama(prompt)
+    llm = await _ask_llm(prompt)
     summary = llm if llm else (
         f"Цель \"{goal.title}\" выполнена на {avg_progress:.0f}%. "
         f"Всего подзадач: {len(descendants)}, из них в зоне риска: {len(risk_items)}."

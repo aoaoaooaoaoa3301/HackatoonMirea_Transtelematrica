@@ -108,11 +108,11 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
                 className={`rounded-lg px-4 py-2.5 max-w-[80%] ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted'
+                    : 'bg-muted md:max-w-[88%]'
                 }`}
               >
                 {msg.role === 'assistant' ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5">
+                  <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-headings:mb-2 prose-headings:mt-0 prose-h2:text-base prose-h3:text-sm prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-li:pl-1 prose-strong:text-foreground">
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
                   </div>
                 ) : (

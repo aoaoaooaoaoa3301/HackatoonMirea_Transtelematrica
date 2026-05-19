@@ -57,7 +57,7 @@ async def ai_suggest_assignee(
 
 @router.post("/chat", response_model=ChatResponse)
 async def ai_chat(body: ChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    result = await ai_service.chat(db, body.message, body.context)
+    result = await ai_service.chat(db, body.message, body.context, current_user)
     return result
 
 
