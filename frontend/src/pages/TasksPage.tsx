@@ -20,14 +20,12 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Strategy + graph tabs always fetch the full set (ignore filters; structure is the value).
   const { data: allTasks, isLoading: isLoadingAll } = useQuery({
     queryKey: ['tasks', 'all'],
     queryFn: () => getTasks({}),
     enabled: tab === 'strategy' || tab === 'graph',
   });
 
-  // List tab uses filters.
   const { data: filteredTasks, isLoading: isLoadingFiltered } = useQuery({
     queryKey: ['tasks', filters],
     queryFn: () => getTasks(filters),
