@@ -10,7 +10,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "${TTM_DB_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ttm -d ttm"]
       interval: 5s
@@ -25,7 +25,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     ports:
-      - "11434:11434"
+      - "${TTM_OLLAMA_PORT:-11434}:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
@@ -67,7 +67,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8080:8000"
+      - "${TTM_API_PORT:-8080}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 10s
@@ -81,7 +81,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "${TTM_WEB_PORT:-80}:80"
 
 volumes:
   db_data:

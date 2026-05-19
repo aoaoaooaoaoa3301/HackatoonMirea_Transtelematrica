@@ -65,54 +65,151 @@
 ## Быстрый старт
 
 ### Требования
-- Docker + Docker Compose
-- ~10 ГБ свободного места (модель Ollama ~5 ГБ)
+- Docker Desktop / Docker Engine 24+ с включённым Compose v2
+- ~3 ГБ свободного места на диске (без AI), +5 ГБ если поднимать локальную LLM
+- 4+ ГБ RAM (8+ если с LLM)
 
-### Запуск (без AI — быстро)
+### 1. Клонирование
+
+```bash
+git clone git@github.com:aoaoaooaoaoa3301/HackatoonMirea_Transtelematrica.git
+cd HackatoonMirea_Transtelematrica
+```
+
+### 2. Запуск (без AI — быстро, ≈3-5 мин на первый build)
 
 ```bash
 docker compose up -d
 ```
 
-При первом запуске:
-1. Поднимется PostgreSQL (хост-порт 5433 → контейнер 5432)
-2. Backend применит миграции и засеет демо-данные
-3. Frontend соберётся в nginx
+Что произойдёт автоматически:
+1. Поднимется PostgreSQL и пройдёт healthcheck
+2. Backend применит миграции и засеет 45 демо-задач + 20 пользователей
+3. Frontend соберётся (nginx со статикой) и зашлёт `/api` на backend
 
-После запуска:
+После запуска (≈30 сек до полной готовности):
 - **UI:** http://localhost
 - **API:** http://localhost:8080/api
 - **Swagger:** http://localhost:8080/docs
 
-AI-функции работают на rule-based фоллбэках и возвращают осмысленные ответы на русском.
+AI-функции работают на rule-based фоллбэках и возвращают осмысленные ответы на русском (детектор рисков, дайджест, парсинг задач, матчинг исполнителя).
 
-### Запуск с локальной LLM (опционально)
+### 3. Опционально — локальная LLM
 
 ```bash
 docker compose --profile ai up -d
 ```
 
-Дополнительно поднимется Ollama и `ollama-bootstrap` подтянет модель `qwen2.5:7b` (~4.7 ГБ). После этого AI-эндпоинты пойдут через локальную LLM вместо фоллбэков.
+Дополнительно поднимется Ollama и `ollama-bootstrap` скачает `qwen2.5:7b` (~4.7 ГБ, 5-15 минут на средне-быстром интернете). После этого AI-эндпоинты пойдут через локальную LLM.
 
-Сменить модель: `OLLAMA_MODEL=qwen2.5:3b docker compose --profile ai up -d`
+Сменить модель:
+```bash
+OLLAMA_MODEL=qwen2.5:3b docker compose --profile ai up -d  # 1.9 ГБ, быстрее
+```
 
 ### Демо-аккаунты
 
 Все пароли: `password`
 
-| Email | Роль | Отдел |
-|---|---|---|
-| `admin@ttm.local` | ADMIN | — |
-| `lead.talents@ttm.local` | LEAD | Молодые таланты |
-| `lead.hr@ttm.local` | LEAD | HR |
-| `lead.aho@ttm.local` | LEAD | АХО |
-| `lead.it@ttm.local` | LEAD | ИТ |
-| `lead.fin@ttm.local` | LEAD | Финансы |
-| `alex@ttm.local` | EMPLOYEE | АХО |
-| `anna.hr@ttm.local` | EMPLOYEE | HR |
-| `dmitry@ttm.local` | EMPLOYEE | ИТ |
-| `elena@ttm.local` | EMPLOYEE | Финансы |
-| `pavel@ttm.local` | EMPLOYEE | Молодые таланты |
+| Email | Роль | ФИО | Отдел |
+|---|---|---|---|
+| `admin@ttm.local` | ADMIN | Анна Смирнова | — |
+| `lead.pmo@ttm.local` | LEAD | Иван Петров | Проектный офис |
+| `lead.rnd@ttm.local` | LEAD | Сергей Кузнецов | НИОКР |
+| `lead.tech@ttm.local` | LEAD | Михаил Воронов | Технический отдел |
+| `lead.it@ttm.local` | LEAD | Дмитрий Орлов | ИТ-инфраструктура |
+| `lead.prod@ttm.local` | LEAD | Виктор Зайцев | Производство |
+| `lead.support@ttm.local` | LEAD | Ольга Иванова | Тех. поддержка |
+| `lead.sales@ttm.local` | LEAD | Андрей Соколов | Отдел продаж |
+| `lead.fin@ttm.local` | LEAD | Татьяна Зайцева | Финансы |
+| `lead.hr@ttm.local` | LEAD | Мария Соколова | HR |
+| `lead.mkt@ttm.local` | LEAD | Екатерина Белова | Маркетинг |
+| `dmitry@ttm.local` | EMPLOYEE | Дмитрий Лебедев | ИТ — **перегружен 230%** |
+| `pavel@ttm.local` | EMPLOYEE | Павел Соловьёв | НИОКР |
+| `anna.hr@ttm.local` | EMPLOYEE | Анна Лебедева | HR |
+| `elena@ttm.local` | EMPLOYEE | Елена Васильева | Тех. поддержка |
+| ...ещё несколько | EMPLOYEE | | |
+
+Полный список — в `backend/app/seed.py`.
+
+---
+
+## Конфигурация (опционально)
+
+Все параметры имеют разумные дефолты. Если хочешь что-то переопределить — скопируй `.env.example` в `.env`:
+
+```bash
+cp .env.example .env
+# отредактируй нужные значения
+docker compose up -d
+```
+
+### Что чаще всего нужно поменять
+
+**Порты заняты другим софтом:**
+```bash
+# .env
+TTM_WEB_PORT=8000        # вместо 80 (если 80 занят другим nginx)
+TTM_API_PORT=18000       # вместо 8080
+TTM_DB_PORT=15433        # вместо 5433
+```
+Или одной строкой без `.env`:
+```bash
+TTM_WEB_PORT=8000 TTM_API_PORT=18000 docker compose up -d
+```
+
+**JWT secret для продакшна:**
+```bash
+JWT_SECRET=$(openssl rand -hex 32)
+```
+
+---
+
+## Troubleshooting
+
+### `Bind for 0.0.0.0:XXXX failed: port is already allocated`
+У тебя что-то слушает порт 80/8080/5433. Проверь чем:
+```bash
+lsof -nP -iTCP:80 -sTCP:LISTEN
+docker ps  # часто это другой docker-проект
+```
+Решения:
+- Освободить порт (`docker stop other-container`)
+- Или переопределить порты через `.env` (см. выше)
+
+### `Cannot connect to the Docker daemon`
+Docker Desktop не запущен. На macOS:
+```bash
+open -a Docker
+# подожди 30 сек пока поднимется
+```
+
+### Дашборд показывает старые/чужие данные
+Сброс БД с пересеяванием демо-данных:
+```bash
+docker compose down
+docker volume rm hackatoonmirea_transtelematrica_db_data
+docker compose up -d
+```
+
+### `npm ci` падает при сборке фронта
+Если `package-lock.json` устарел относительно `package.json` — пересобери:
+```bash
+docker compose build --no-cache frontend
+```
+
+### Логи смотреть
+```bash
+docker compose logs -f backend    # бэкенд
+docker compose logs -f frontend   # nginx + сборка
+docker compose ps                 # статус контейнеров
+```
+
+### Полный сброс (всё с нуля)
+```bash
+docker compose down -v            # -v убивает volumes (БД, ollama)
+docker compose up -d --build      # пересобирает образы
+```
 
 ---
 
