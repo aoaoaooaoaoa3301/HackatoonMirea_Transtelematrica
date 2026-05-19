@@ -351,9 +351,253 @@ function TaskNodeCard({
   );
 }
 
+// ──────────────────────── overview panel ────────────────────────
+// Right-side detail panel — shows everything about the selected task
+// in one place: type/status header, description, meta, the parent
+// chain (with assignees), and direct subtasks (clickable to drill).
+
+interface OverviewPanelProps {
+  task: Task;
+  chain: Task[]; // root → … → selected (inclusive)
+  children: Task[];
+  onClose: () => void;
+  onSelectChild: (id: string) => void;
+  onOpen: () => void;
+}
+
+function TaskOverviewPanel({
+  task,
+  chain,
+  children,
+  onClose,
+  onSelectChild,
+  onOpen,
+}: OverviewPanelProps) {
+  const accent = TYPE_ACCENT[task.type];
+  const statusColor = STATUS_DOT[task.status];
+  const ancestors = chain.filter((t) => t.id !== task.id);
+
+  const daysLeft = task.due_date
+    ? Math.ceil(
+        (new Date(task.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      )
+    : null;
+
+  return (
+    <div
+      className="absolute top-[58px] right-3 bottom-3 w-[340px] z-20 rounded-lg border bg-background/97 backdrop-blur shadow-2xl flex flex-col"
+      style={{
+        animation: 'ttm-panel-in 280ms cubic-bezier(.2,.7,.3,1) both',
+      }}
+    >
+      {/* Header */}
+      <div
+        className="px-4 py-3 border-b flex items-start justify-between gap-2"
+        style={{
+          background: `linear-gradient(135deg, ${accent}18 0%, transparent 100%)`,
+        }}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Badge
+              variant="outline"
+              className="text-[10px] py-0"
+              style={{ borderColor: `${accent}80`, color: accent }}
+            >
+              {COL_LABEL_SHORT[task.type]}
+            </Badge>
+            <Badge
+              className="text-[10px] py-0 border-0 text-white"
+              style={{ backgroundColor: statusColor }}
+            >
+              {STATUS_LABELS[task.status]}
+            </Badge>
+          </div>
+          <h3 className="text-base font-semibold leading-tight">{task.title}</h3>
+        </div>
+        <button
+          className="p-1 -m-1 rounded hover:bg-muted shrink-0"
+          onClick={onClose}
+          aria-label="Закрыть"
+        >
+          <X className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        {task.description && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+              Описание
+            </div>
+            <p className="text-xs leading-relaxed">{task.description}</p>
+          </div>
+        )}
+
+        {/* Meta grid */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          {task.assignee_name && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                Исполнитель
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Avatar className="h-5 w-5 shrink-0">
+                  <AvatarFallback
+                    className="text-[9px] font-medium"
+                    style={{ backgroundColor: `${accent}30`, color: accent }}
+                  >
+                    {initials(task.assignee_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="truncate">{task.assignee_name}</span>
+              </div>
+            </div>
+          )}
+          {task.assigned_department_name && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                Отдел
+              </div>
+              <div className="truncate">{task.assigned_department_name}</div>
+            </div>
+          )}
+          {task.start_date && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                Старт
+              </div>
+              <div>{new Date(task.start_date).toLocaleDateString('ru-RU')}</div>
+            </div>
+          )}
+          {task.due_date && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                Дедлайн
+              </div>
+              <div className="flex flex-col">
+                <span>{new Date(task.due_date).toLocaleDateString('ru-RU')}</span>
+                {daysLeft !== null && (
+                  <span
+                    className={
+                      daysLeft < 0
+                        ? 'text-rose-500 text-[10px]'
+                        : daysLeft <= 3
+                        ? 'text-amber-500 text-[10px]'
+                        : 'text-muted-foreground text-[10px]'
+                    }
+                  >
+                    {daysLeft < 0
+                      ? `просрочено на ${-daysLeft} дн.`
+                      : daysLeft === 0
+                      ? 'сегодня'
+                      : `осталось ${daysLeft} дн.`}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Progress */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Прогресс
+            </span>
+            <span className="text-xs font-semibold">{task.progress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full transition-all"
+              style={{
+                width: `${task.progress}%`,
+                backgroundColor: accent,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Parent chain */}
+        {ancestors.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+              Откуда родилась эта задача
+            </div>
+            <div className="space-y-1">
+              {ancestors.map((t, i) => (
+                <button
+                  key={t.id}
+                  className="w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left"
+                  onClick={() => onSelectChild(t.id)}
+                >
+                  <span
+                    className="text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0"
+                    style={{
+                      backgroundColor: `${TYPE_ACCENT[t.type]}25`,
+                      color: TYPE_ACCENT[t.type],
+                    }}
+                  >
+                    {COL_LABEL_SHORT[t.type]}
+                  </span>
+                  <span className="truncate flex-1 font-medium">{t.title}</span>
+                  {t.assignee_name && (
+                    <span className="text-muted-foreground truncate text-[10px]">
+                      {t.assignee_name.split(' ')[0]}
+                    </span>
+                  )}
+                  {i < ancestors.length - 1 && (
+                    <span className="text-muted-foreground">↓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Direct children */}
+        {children.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+              Подзадачи ({children.length})
+            </div>
+            <div className="space-y-1">
+              {children.map((c) => (
+                <button
+                  key={c.id}
+                  className="w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left"
+                  onClick={() => onSelectChild(c.id)}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: STATUS_DOT[c.status] }}
+                  />
+                  <span className="truncate flex-1">{c.title}</span>
+                  <span className="text-muted-foreground text-[10px] shrink-0">
+                    {c.progress}%
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t">
+        <Button size="sm" className="w-full" onClick={onOpen}>
+          Открыть полную карточку →
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ──────────────────────── main component ────────────────────────
 
 export function TaskGraphView({ tasks }: { tasks: Task[] }) {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dims, setDims] = useState({ w: 1200, h: 700 });
@@ -389,17 +633,23 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks]);
 
-  // Layout
-  const { placed, maxRowByCol, hasChildrenOf, parentChainOf } = useMemo(() => {
+  // Layout + relationship helpers. The graph view leans on three derived
+  // structures: parent_chain (id → ancestors up to GOAL),
+  // descendantsOf (id → entire subtree below), and childrenOf (direct only).
+  // These power the "click a goal → light up its whole branch, fade
+  // everything else" behaviour.
+  const { placed, maxRowByCol, hasChildrenOf, parentChainOf, descendantsOf, directChildrenOf } = useMemo(() => {
     const layoutOut = layoutTasks(tasks, expanded);
-    const childCount = new Map<string, number>();
+    const childrenByParent = new Map<string, Task[]>();
     tasks.forEach((t) => {
       if (t.parent_id) {
-        childCount.set(t.parent_id, (childCount.get(t.parent_id) ?? 0) + 1);
+        if (!childrenByParent.has(t.parent_id)) childrenByParent.set(t.parent_id, []);
+        childrenByParent.get(t.parent_id)!.push(t);
       }
     });
     const taskById = new Map(tasks.map((t) => [t.id, t]));
     const chainCache = new Map<string, Set<string>>();
+    const descCache = new Map<string, Set<string>>();
     function chainFor(id: string): Set<string> {
       if (chainCache.has(id)) return chainCache.get(id)!;
       const chain = new Set<string>();
@@ -411,11 +661,29 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
       chainCache.set(id, chain);
       return chain;
     }
+    function descFor(id: string): Set<string> {
+      if (descCache.has(id)) return descCache.get(id)!;
+      const out = new Set<string>([id]);
+      const stack = [id];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        (childrenByParent.get(cur) ?? []).forEach((c) => {
+          if (!out.has(c.id)) {
+            out.add(c.id);
+            stack.push(c.id);
+          }
+        });
+      }
+      descCache.set(id, out);
+      return out;
+    }
     return {
       placed: layoutOut.placed,
       maxRowByCol: layoutOut.maxRowByCol,
-      hasChildrenOf: (id: string) => (childCount.get(id) ?? 0) > 0,
+      hasChildrenOf: (id: string) => (childrenByParent.get(id)?.length ?? 0) > 0,
       parentChainOf: chainFor,
+      descendantsOf: descFor,
+      directChildrenOf: (id: string) => childrenByParent.get(id) ?? [],
     };
   }, [tasks, expanded]);
 
@@ -441,6 +709,21 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
     if (!activeId) return new Set<string>();
     return parentChainOf(activeId);
   }, [activeId, parentChainOf]);
+
+  // When something is *selected* (not just hovered), the focus set is
+  // the union of its entire descendant subtree AND its parent chain. The
+  // user clicked a GOAL → we want every mini-task underneath visible and
+  // bright, plus the chain above for context. On hover-only, focus is
+  // just the parent chain (lighter affordance).
+  const focusSet = useMemo(() => {
+    if (selectedId) {
+      const out = new Set<string>(descendantsOf(selectedId));
+      parentChainOf(selectedId).forEach((id) => out.add(id));
+      return out;
+    }
+    if (hoveredId) return parentChainOf(hoveredId);
+    return new Set<string>();
+  }, [selectedId, hoveredId, descendantsOf, parentChainOf]);
 
   // Search-filtered ID set: cards whose title matches the query are pulled
   // forward, others fade. Empty query = nothing dimmed.
@@ -476,10 +759,81 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
     });
   }, [dims, contentBounds]);
 
+  // Fit camera to the selected subtree so the user lands on the
+  // expanded branch rather than at the original viewport. Right-side
+  // panel takes ~340px → reserve that space.
+  const fitToSubtree = useCallback(() => {
+    if (!selectedId) return;
+    const ids = focusSet;
+    const placedInFocus = Array.from(ids)
+      .map((id) => placed.get(id))
+      .filter((p): p is Placed => Boolean(p));
+    if (placedInFocus.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    placedInFocus.forEach((p) => {
+      const x = COL_X[p.task.type];
+      const y = p.row * ROW_HEIGHT;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x + CARD_WIDTH);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y + CARD_HEIGHT);
+    });
+    // Padding around the focus rect
+    const padX = 30, padY = 30;
+    const w = maxX - minX + padX * 2;
+    const h = maxY - minY + padY * 2;
+    const availW = dims.w - 360; // leave room for the overview panel
+    const availH = dims.h - 56 - 60;
+    const k = Math.min(availW / w, availH / h, 1.0);
+    setTransform({
+      x: -(minX - padX) * k + 12,
+      y: -(minY - padY) * k + 56 + (availH - h * k) / 2,
+      k,
+    });
+  }, [selectedId, focusSet, placed, dims]);
+
   useEffect(() => {
     fitToView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks]);
+
+  // When selection changes, camera flies to the focused branch.
+  useEffect(() => {
+    if (selectedId) fitToSubtree();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  // Select a task: pin it AND auto-expand its full subtree so every
+  // descendant is rendered. Clicking the same task again deselects.
+  const handleSelect = useCallback(
+    (id: string) => {
+      setSelectedId((cur) => {
+        if (cur === id) return null;
+        // expand the subtree under the new selection
+        const desc = descendantsOf(id);
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          desc.forEach((d) => {
+            if (d !== id) next.add(d);
+          });
+          // also expand the clicked node itself so its direct children show
+          next.add(id);
+          return next;
+        });
+        return id;
+      });
+    },
+    [descendantsOf]
+  );
+
+  // ESC clears selection — quick exit from focus mode.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedId(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const toggleNode = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -642,51 +996,28 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
         )}
       </div>
 
-      {/* Selected → breadcrumb chain banner */}
-      {selectedTask && chainTasks.length > 1 && (
-        <div className="absolute top-[58px] right-3 z-10 max-w-[640px] rounded-md border bg-background/95 backdrop-blur p-3 shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold">Цепочка ответственных</span>
-            <button
-              className="p-1 hover:bg-muted rounded"
-              onClick={() => setSelectedId(null)}
-              aria-label="Закрыть"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="space-y-1.5">
-            {chainTasks.map((t, i) => (
-              <div key={t.id} className="flex items-center gap-2 text-xs">
-                <span
-                  className="text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0"
-                  style={{
-                    backgroundColor: `${TYPE_ACCENT[t.type]}25`,
-                    color: TYPE_ACCENT[t.type],
-                  }}
-                >
-                  {COL_LABEL_SHORT[t.type]}
-                </span>
-                <span className="truncate flex-1 font-medium">{t.title}</span>
-                {t.assignee_name && (
-                  <span className="text-muted-foreground truncate">
-                    {t.assignee_name}
-                  </span>
-                )}
-                {i < chainTasks.length - 1 && (
-                  <span className="text-muted-foreground">↓</span>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t">
-            Клик по имени в карточке → контакты ответственного
-          </div>
-        </div>
+      {/* Right-side overview panel — slides in when a card is selected.
+          Shows task overview + parent chain + direct subtasks, all in
+          one place so the canvas keeps focus on the highlighted branch. */}
+      {selectedTask && (
+        <TaskOverviewPanel
+          task={selectedTask}
+          chain={chainTasks}
+          children={directChildrenOf(selectedTask.id)}
+          onClose={() => setSelectedId(null)}
+          onSelectChild={(id) => handleSelect(id)}
+          onOpen={() => navigate(`/tasks/${selectedTask.id}`)}
+        />
       )}
 
-      <div className="absolute bottom-3 right-3 z-10 text-[10px] text-muted-foreground bg-background/80 backdrop-blur rounded px-2 py-1 pointer-events-none">
-        Наведи — увидеть цепочку · Клик — закрепить · Двойной клик — карточка задачи
+      <div
+        className="absolute bottom-3 left-3 z-10 text-[10px] text-muted-foreground bg-background/80 backdrop-blur rounded px-2 py-1 pointer-events-none"
+        style={{
+          right: selectedTask ? 360 : 12,
+          transition: 'right 250ms ease',
+        }}
+      >
+        Наведи — цепочка наверх · Клик — раскрыть ветку и фокус · ESC — сбросить
       </div>
 
       {/* Animations — declared once, used by every card via inline animation */}
@@ -699,6 +1030,10 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
           @keyframes ttm-pulse-ring {
             0%, 100% { box-shadow: 0 0 0 0 currentColor; }
             50%      { box-shadow: 0 0 0 6px transparent; }
+          }
+          @keyframes ttm-panel-in {
+            from { opacity: 0; transform: translateX(12px); }
+            to   { opacity: 1; transform: translateX(0); }
           }
         `}
       </style>
@@ -748,29 +1083,32 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
           {/* Edges */}
           <g style={{ pointerEvents: 'none' }}>
             {edges.map(({ src, dst }, i) => {
-              const isChain = chain.has(src.task.id) && chain.has(dst.task.id);
+              // An edge is "in focus" if both endpoints are in the focus
+              // set (selected subtree ∪ ancestor chain, or just the
+              // hover-chain). Flow particles only run on the parent
+              // chain — otherwise too much animation when a whole
+              // subtree is expanded.
+              const inFocus =
+                focusSet.has(src.task.id) && focusSet.has(dst.task.id);
+              const onChain = chain.has(src.task.id) && chain.has(dst.task.id);
               const filterFade =
                 searchMatchIds !== null &&
                 !searchMatchIds.has(src.task.id) &&
                 !searchMatchIds.has(dst.task.id);
-              const isDimmed = (activeId !== null && !isChain) || filterFade;
+              const isDimmed = (activeId !== null && !inFocus) || filterFade;
               const edgeKey = `${src.task.id}-${dst.task.id}`;
-              const stroke = isChain ? TYPE_ACCENT[src.task.type] : 'rgba(148,163,184,0.5)';
+              const stroke = inFocus ? TYPE_ACCENT[src.task.type] : 'rgba(148,163,184,0.5)';
               return (
                 <g key={`e-${edgeKey}-${i}`}>
                   <path
                     d={bezierEdge(src, dst)}
                     fill="none"
                     stroke={stroke}
-                    strokeWidth={isChain ? 2.2 : 1.4}
-                    opacity={isDimmed ? 0.16 : 1}
+                    strokeWidth={inFocus ? 2.2 : 1.4}
+                    opacity={isDimmed ? 0.14 : 1}
                     style={{ transition: 'all 250ms ease' }}
                   />
-                  {/* Flow particles — only on edges that are part of the
-                      currently highlighted chain. Two staggered dots run
-                      from parent to child to convey "responsibility flows
-                      from goal down to subtask". */}
-                  {isChain && (
+                  {onChain && (
                     <>
                       <circle r={2.6} fill={stroke}>
                         <animateMotion
@@ -799,23 +1137,28 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
           {/* Cards */}
           <g>
             {placedList.map((p, idx) => {
-              const inChain = chain.has(p.task.id);
+              const inFocus = focusSet.has(p.task.id);
+              const onChain = chain.has(p.task.id);
               const matched = searchMatchIds?.has(p.task.id) ?? null;
               const filterFade = matched === false;
-              const isDimmed = (activeId !== null && !inChain) || filterFade;
+              const isDimmed = (activeId !== null && !inFocus) || filterFade;
               return (
                 <TaskNodeCard
                   key={p.task.id}
                   placed={p}
                   hasChildren={hasChildrenOf(p.task.id)}
                   isExpanded={expanded.has(p.task.id)}
-                  isInChain={inChain && p.task.id !== selectedId && p.task.id !== hoveredId}
+                  isInChain={
+                    (onChain || inFocus) &&
+                    p.task.id !== selectedId &&
+                    p.task.id !== hoveredId
+                  }
                   isSelected={p.task.id === selectedId}
                   isHovered={p.task.id === hoveredId}
                   isDimmed={isDimmed}
                   appearDelay={Math.min(idx * 30, 360)}
                   onToggle={() => toggleNode(p.task.id)}
-                  onSelect={() => setSelectedId((cur) => (cur === p.task.id ? null : p.task.id))}
+                  onSelect={() => handleSelect(p.task.id)}
                   onHover={setHoveredId}
                 />
               );
