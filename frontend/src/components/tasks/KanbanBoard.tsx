@@ -57,7 +57,8 @@ function SortableTask({ task }: SortableTaskProps) {
 
   const TypeIcon = typeIcons[task.type];
   const priorityColor = PRIORITY_COLORS[task.priority];
-  const initials = task.assignee?.full_name
+  const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
+  const initials = assigneeName
     ?.split(' ')
     .map((n) => n[0])
     .join('')
@@ -87,7 +88,7 @@ function SortableTask({ task }: SortableTaskProps) {
             </div>
           )}
           <div className="flex-1" />
-          {task.assignee && (
+          {assigneeName && (
             <Avatar className="h-5 w-5">
               <AvatarFallback className="text-[9px] bg-primary/10">{initials}</AvatarFallback>
             </Avatar>

@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { chat } from '@/api/ai';
 import type { AIChatMessage } from '@/types';
 
+const STORAGE_KEY = 'ttm-ai-chat-messages';
+
 const quickActions = [
   { label: 'Сводка по моей команде', message: 'Дай сводку по задачам моей команды за эту неделю' },
   { label: 'Что в зоне риска?', message: 'Какие задачи сейчас в зоне риска и почему?' },
@@ -22,7 +24,15 @@ interface AIChatPanelProps {
 }
 
 export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanelProps) {
-  const [messages, setMessages] = useState<AIChatMessage[]>([]);
+  const [messages, setMessages] = useState<AIChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.slice(-40) : [];
+    } catch {
+      return [];
+    }
+  });
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -30,6 +40,7 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
     mutationFn: (message: string) =>
       chat({
         message,
+        history: messages.slice(-20),
         context:
           contextScope === 'department' && contextDeptId
             ? { department_id: contextDeptId }
@@ -61,6 +72,7 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-40)));
   }, [messages]);
 
   return (

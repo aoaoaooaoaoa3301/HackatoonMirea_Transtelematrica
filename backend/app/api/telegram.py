@@ -42,7 +42,7 @@ def _get_or_create_session(db: Session, telegram_user_id: int, user_id) -> Teleg
     if session:
         session.user_id = user_id
         return session
-    session = TelegramSession(telegram_user_id=telegram_user_id, user_id=user_id, last_task_ids=[])
+    session = TelegramSession(telegram_user_id=telegram_user_id, user_id=user_id, last_task_ids=[], chat_history=[])
     db.add(session)
     db.flush()
     return session
@@ -133,6 +133,12 @@ async def telegram_command(body: TelegramCommandRequest, db: Session = Depends(g
     session.pending_action = response.pending_action
     session.last_intent = response.intent
     session.last_scope = response.scope
+    history = list(session.chat_history or [])
+    history.extend([
+        {"role": "user", "content": body.message},
+        {"role": "assistant", "content": response.text},
+    ])
+    session.chat_history = history[-20:]
     db.add(session)
     db.commit()
     return {"text": response.text, "buttons": response.buttons}
@@ -157,4 +163,8 @@ async def confirm_action(body: TelegramConfirmActionRequest, db: Session = Depen
     if not session:
         session = _get_or_create_session(db, body.telegram_user_id, account.user_id)
     response = await execute_pending_action(db, user, session, body.callback_data)
+    if response.task_ids:
+        session.last_task_ids = [str(task_id) for task_id in response.task_ids]
+        db.add(session)
+        db.commit()
     return {"text": response.text, "buttons": response.buttons}

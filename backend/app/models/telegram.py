@@ -44,6 +44,7 @@ class TelegramSession(Base):
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     last_task_ids: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    chat_history: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
     pending_action: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     last_intent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     last_scope: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

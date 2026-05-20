@@ -10,6 +10,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import apply_task_scope, user_can_access_task
 from app.models.task import Task
 from app.models.user import User
@@ -926,4 +927,142 @@ async def goal_summary(db: Session, goal_id: UUID, current_user: Optional[User] 
         "progress": round(avg_progress, 1),
         "risks": risk_items,
         "summary": summary,
+    }
+
+
+# The final chat implementation below intentionally overrides the earlier
+# iterations in this module. It keeps deterministic DB answers for common
+# task analytics, but also gives the LLM normal assistant context and memory.
+
+CHAT_SYSTEM_PROMPT = (
+    "Ты AI-помощник в системе управления задачами компании Транстелематика. "
+    "Отвечай на русском, кратко и удобно: короткие абзацы, списки только когда они реально помогают. "
+    "Если вопрос про задачи, сотрудников, сроки, риски или загрузку, опирайся на переданный контекст БД. "
+    "Если вопрос общий или про тебя, отвечай как обычный ассистент и не требуй данные из БД. "
+    "Не выдумывай факты о задачах, которых нет в контексте."
+)
+
+
+def _chat_model_name() -> str:
+    provider = settings.LLM_PROVIDER
+    if provider == "openai_compatible":
+        return settings.OPENAI_COMPATIBLE_MODEL
+    if provider in {"ollama", "docker_model"}:
+        return settings.OLLAMA_MODEL
+    return provider
+
+
+def _looks_like_model_question(message: str) -> bool:
+    text = message.lower()
+    return any(word in text for word in ("модель", "model", "llm", "кто ты", "что ты такое"))
+
+
+def _relevant_tasks_for_message(tasks: List[Task], message: str, limit: int = 12) -> List[Task]:
+    words = [word for word in re.findall(r"[\w-]+", message.lower(), flags=re.UNICODE) if len(word) > 2]
+    if not words:
+        return []
+
+    scored = []
+    for task in tasks:
+        assignee = task.assignee.full_name if task.assignee else ""
+        department = task.assigned_department.name if task.assigned_department else ""
+        haystack = " ".join([task.title or "", task.description or "", assignee, department]).lower()
+        score = sum(1 for word in words if word in haystack)
+        if score:
+            scored.append((score, task.updated_at, task))
+
+    scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    return [task for _, _, task in scored[:limit]]
+
+
+def _history_text(history: list[dict]) -> str:
+    rows = []
+    for item in (history or [])[-12:]:
+        role = "Пользователь" if item.get("role") == "user" else "Ассистент"
+        content = str(item.get("content") or "").strip()
+        if content:
+            rows.append(f"{role}: {content[:1200]}")
+    return "\n".join(rows)
+
+
+def _task_context_for_chat(tasks: List[Task], scope_label: str, message: str) -> str:
+    today = date.today()
+    active = [task for task in tasks if task.status != TaskStatus.DONE]
+    overdue = [task for task in active if task.status == TaskStatus.OVERDUE or (task.due_date and task.due_date < today)]
+    risk = [task for task in active if task.due_date and 0 <= (task.due_date - today).days <= 7]
+    high_priority = [task for task in active if task.priority in (TaskPriority.HIGH, TaskPriority.CRITICAL)]
+    relevant = _relevant_tasks_for_message(tasks, message)
+
+    focus = []
+    for group in (relevant, overdue, risk, high_priority):
+        for task in group:
+            if task not in focus:
+                focus.append(task)
+            if len(focus) >= 30:
+                break
+        if len(focus) >= 30:
+            break
+
+    status_counts = {}
+    for task in tasks:
+        status_counts[task.status.value] = status_counts.get(task.status.value, 0) + 1
+
+    lines = [
+        f"Область данных: {scope_label}.",
+        f"Всего задач в доступном контексте: {len(tasks)}; активных: {len(active)}; просроченных: {len(overdue)}; в зоне риска на 7 дней: {len(risk)}.",
+        "Статусы: " + ", ".join(f"{key}: {value}" for key, value in status_counts.items()),
+    ]
+    if focus:
+        lines.append("Релевантные и приоритетные задачи:")
+        lines.extend(_task_line(task) for task in focus)
+    else:
+        lines.append("По словам из запроса точных совпадений в задачах не найдено.")
+    return "\n".join(lines)
+
+
+async def chat(db: Session, message: str, context: Optional[dict] = None, current_user: Optional[User] = None) -> dict:
+    context = context or {}
+    scope, scope_id, scope_label = _chat_scope(db, context, current_user)
+    message_lower = message.lower()
+
+    if _looks_like_model_question(message):
+        return {
+            "reply": (
+                f"Я AI-помощник проекта Транстелематика. Сейчас backend настроен на провайдера "
+                f"`{settings.LLM_PROVIDER}`, модель: `{_chat_model_name()}`."
+            )
+        }
+
+    if any(word in message_lower for word in ("перегруж", "загруз", "нагруз")):
+        return {"reply": _final_chat_overload(db, scope, scope_id, scope_label, current_user)}
+
+    tasks = _scoped_tasks(db, scope, scope_id, current_user)
+
+    if any(word in message_lower for word in ("риск", "риска", "риске", "просроч")):
+        return {"reply": _final_chat_risks(tasks, scope_label)}
+
+    if any(word in message_lower for word in ("сводк", "отчет", "отчёт", "дайджест", "недел")):
+        return {"reply": _final_chat_digest(tasks, scope_label)}
+
+    history = context.get("history") or []
+    prompt_parts = [
+        _task_context_for_chat(tasks, scope_label, message),
+    ]
+    if history:
+        prompt_parts.append("Недавняя история диалога:\n" + _history_text(history))
+    prompt_parts.append("Текущий вопрос пользователя: " + message)
+
+    llm = await _ask_llm("\n\n".join(prompt_parts), CHAT_SYSTEM_PROMPT)
+    if llm:
+        return {"reply": llm}
+
+    relevant = _relevant_tasks_for_message(tasks, message, limit=5)
+    if relevant:
+        return {"reply": "Нашёл похожие задачи:\n" + "\n".join(_task_line(task) for task in relevant)}
+
+    return {
+        "reply": (
+            "Не удалось получить ответ модели. По данным задач я не нашёл прямого совпадения с запросом. "
+            "Уточните название задачи, сотрудника, отдел или период."
+        )
     }

@@ -109,6 +109,13 @@ export default function TaskDetailPage() {
 
   const TypeIcon = typeIcons[task.type];
   const statusColor = STATUS_COLORS[task.status];
+  const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
+  const departmentName = task.assigned_department_name ?? task.department?.name ?? null;
+  const assigneeInitials = assigneeName
+    ?.split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2);
 
   return (
     <div className="space-y-6">
@@ -375,14 +382,14 @@ export default function TaskDetailPage() {
               {/* Assignee */}
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Исполнитель</p>
-                {task.assignee ? (
+                {assigneeName ? (
                   <div className="flex items-center gap-2">
                     <Avatar className="h-7 w-7">
                       <AvatarFallback className="text-[10px] bg-primary/10">
-                        {task.assignee.full_name?.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                        {assigneeInitials}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="text-sm">{task.assignee.full_name}</span>
+                    <span className="text-sm">{assigneeName}</span>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Не назначен</p>
@@ -392,7 +399,7 @@ export default function TaskDetailPage() {
               {/* Department */}
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Отдел</p>
-                <p className="text-sm">{task.department?.name ?? 'Не указан'}</p>
+                <p className="text-sm">{departmentName ?? 'Не указан'}</p>
               </div>
 
               <Separator />

@@ -79,6 +79,7 @@ class SuggestAssigneeResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     context: Optional[dict] = None
+    history: List[dict] = []
 
 
 class ChatResponse(BaseModel):

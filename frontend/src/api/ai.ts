@@ -59,6 +59,7 @@ export async function suggestAssignee(params: {
 export async function chat(params: {
   message: string;
   context?: { task_id?: string; department_id?: string };
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }): Promise<{ reply: string }> {
   const res = await apiClient.post<{ reply: string }>('/ai/chat', params);
   return res.data;

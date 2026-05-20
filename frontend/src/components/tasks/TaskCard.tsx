@@ -52,8 +52,10 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
   const displayStatusLabel = atRisk ? AT_RISK_STYLE.label : STATUS_LABELS[task.status];
   const displayStatusText = atRisk ? AT_RISK_STYLE.text : statusColor.text;
   const displayStatusBg = atRisk ? AT_RISK_STYLE.bg : statusColor.bg;
+  const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
+  const departmentName = task.assigned_department_name ?? task.department?.name ?? null;
 
-  const initials = task.assignee?.full_name
+  const initials = assigneeName
     ?.split(' ')
     .map((n) => n[0])
     .join('')
@@ -74,7 +76,7 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
           <Badge className={`${priorityColor.text} ${priorityColor.bg} border-0 text-[11px]`}>
             {PRIORITY_LABELS[task.priority]}
           </Badge>
-          {task.assignee && (
+          {assigneeName && (
             <Avatar className="h-6 w-6">
               <AvatarFallback className="text-[10px] bg-primary/10">{initials}</AvatarFallback>
             </Avatar>
@@ -129,18 +131,18 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
           )}
 
           {/* Assignee row */}
-          {task.assignee && (
+          {assigneeName && (
             <div className="flex items-center gap-2 mb-3">
               <Avatar className="h-6 w-6">
                 <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col min-w-0">
                 <span className="text-[12px] font-medium truncate">
-                  {task.assignee.full_name}
+                  {assigneeName}
                 </span>
-                {task.department?.name && (
+                {departmentName && (
                   <span className="text-[10px] text-muted-foreground truncate">
-                    {task.department.name}
+                    {departmentName}
                   </span>
                 )}
               </div>
