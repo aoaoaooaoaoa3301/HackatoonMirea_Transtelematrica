@@ -56,6 +56,7 @@ from app.api.departments import router as departments_router
 from app.api.tasks import router as tasks_router
 from app.api.analytics import router as analytics_router
 from app.api.ai import router as ai_router
+from app.api.telegram import router as telegram_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
@@ -63,6 +64,7 @@ app.include_router(departments_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(telegram_router, prefix="/api")
 
 
 @app.get("/health")

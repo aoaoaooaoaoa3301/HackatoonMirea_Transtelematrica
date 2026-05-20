@@ -121,22 +121,27 @@ def compute_user_workload(db: Session, user_id: uuid.UUID) -> dict:
     }
 
 
-def build_tree(db: Session, root_id: Optional[uuid.UUID] = None, max_depth: int = 4) -> List[dict]:
+def build_tree(db: Session, root_id: Optional[uuid.UUID] = None, max_depth: int = 4, current_user=None) -> List[dict]:
     """Build task tree(s). If root_id given, single tree; else all GOAL roots."""
+    from app.core.deps import apply_task_scope, user_can_access_task
+
     if root_id:
         root = db.get(Task, root_id)
-        if root is None:
+        if root is None or (current_user and not user_can_access_task(db, current_user, root)):
             return []
-        return [_tree_node(db, root, 0, max_depth)]
+        return [_tree_node(db, root, 0, max_depth, current_user)]
     else:
-        roots = db.query(Task).filter(
+        query = db.query(Task)
+        if current_user:
+            query = apply_task_scope(query, current_user, db)
+        roots = query.filter(
             Task.parent_id.is_(None),
             Task.type == TaskType.GOAL,
         ).all()
-        return [_tree_node(db, r, 0, max_depth) for r in roots]
+        return [_tree_node(db, r, 0, max_depth, current_user) for r in roots]
 
 
-def _tree_node(db: Session, task: Task, depth: int, max_depth: int) -> dict:
+def _tree_node(db: Session, task: Task, depth: int, max_depth: int, current_user=None) -> dict:
     node = {
         "id": task.id,
         "type": task.type,
@@ -152,6 +157,10 @@ def _tree_node(db: Session, task: Task, depth: int, max_depth: int) -> dict:
         "children": [],
     }
     if depth < max_depth:
-        children = db.query(Task).filter(Task.parent_id == task.id).all()
-        node["children"] = [_tree_node(db, c, depth + 1, max_depth) for c in children]
+        query = db.query(Task).filter(Task.parent_id == task.id)
+        if current_user:
+            from app.core.deps import apply_task_scope
+            query = apply_task_scope(query, current_user, db)
+        children = query.all()
+        node["children"] = [_tree_node(db, c, depth + 1, max_depth, current_user) for c in children]
     return node

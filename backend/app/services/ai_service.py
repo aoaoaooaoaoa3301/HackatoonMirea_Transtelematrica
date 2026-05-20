@@ -2,21 +2,21 @@
 
 All public functions return deterministic results even when the LLM is unavailable.
 """
-import json
 import re
 import logging
 from datetime import date, timedelta
 from typing import Optional, List
 from uuid import UUID
 
-import httpx
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.deps import apply_task_scope, user_can_access_task
 from app.models.task import Task
 from app.models.user import User
 from app.models.department import Department
-from app.models.enums import TaskStatus, TaskPriority, TaskType, PRIORITY_WEIGHT
+from app.models.enums import TaskStatus, TaskPriority, TaskType, UserRole, PRIORITY_WEIGHT
+from app.services.llm import get_llm_provider
+from app.services.llm.json_utils import extract_json_array, extract_json_object
 from app.services.task_service import compute_user_workload, compute_period_bucket
 
 logger = logging.getLogger(__name__)
@@ -25,38 +25,20 @@ logger = logging.getLogger(__name__)
 # LLM client
 # ---------------------------------------------------------------------------
 
-async def _ask_llm(prompt: str, system: str = "") -> Optional[str]:
-    """Call the configured local LLM. Returns text or None on any failure."""
+async def _ask_llm(
+    prompt: str,
+    system: str = "",
+    json_mode: bool = False,
+    temperature: float = 0.2,
+) -> Optional[str]:
+    """Call the configured LLM provider. Returns text or None on any failure."""
     try:
-        async with httpx.AsyncClient(timeout=settings.OLLAMA_TIMEOUT) as client:
-            if settings.LLM_PROVIDER == "docker_model":
-                messages = []
-                if system:
-                    messages.append({"role": "system", "content": system})
-                messages.append({"role": "user", "content": prompt})
-                resp = await client.post(
-                    f"{settings.DOCKER_MODEL_URL}/v1/chat/completions",
-                    json={"model": settings.OLLAMA_MODEL, "messages": messages, "stream": False},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices") or []
-                    if choices:
-                        return choices[0].get("message", {}).get("content", "").strip()
-                logger.warning("Docker Model Runner returned status %d: %s", resp.status_code, resp.text[:500])
-                return None
-
-            body = {
-                "model": settings.OLLAMA_MODEL,
-                "prompt": prompt,
-                "system": system,
-                "stream": False,
-            }
-            resp = await client.post(f"{settings.OLLAMA_URL}/api/generate", json=body)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("response", "").strip()
-            logger.warning("Ollama returned status %d: %s", resp.status_code, resp.text[:500])
+        return await get_llm_provider().generate(
+            prompt=prompt,
+            system=system,
+            json_mode=json_mode,
+            temperature=temperature,
+        )
     except Exception as e:
         logger.warning("LLM call failed: %s", e)
     return None
@@ -66,8 +48,15 @@ async def _ask_llm(prompt: str, system: str = "") -> Optional[str]:
 # DIGEST
 # ---------------------------------------------------------------------------
 
-def _gather_tasks_for_scope(db: Session, scope: str, scope_id: Optional[UUID]) -> List[Task]:
+def _gather_tasks_for_scope(
+    db: Session,
+    scope: str,
+    scope_id: Optional[UUID],
+    current_user: Optional[User] = None,
+) -> List[Task]:
     q = db.query(Task)
+    if current_user:
+        q = apply_task_scope(q, current_user, db)
     if scope == "department" and scope_id:
         q = q.filter(Task.assigned_department_id == scope_id)
     elif scope == "user" and scope_id:
@@ -99,8 +88,14 @@ def _build_stats_text(tasks: List[Task]) -> str:
     return "\n".join(lines)
 
 
-async def digest(db: Session, scope: str, scope_id: Optional[UUID], period: str = "month") -> dict:
-    tasks = _gather_tasks_for_scope(db, scope, scope_id)
+async def digest(
+    db: Session,
+    scope: str,
+    scope_id: Optional[UUID],
+    period: str = "month",
+    current_user: Optional[User] = None,
+) -> dict:
+    tasks = _gather_tasks_for_scope(db, scope, scope_id, current_user)
     stats_text = _build_stats_text(tasks)
 
     scope_label = "по всей организации"
@@ -118,14 +113,13 @@ async def digest(db: Session, scope: str, scope_id: Optional[UUID], period: str 
         "Отвечай только на русском. Формат JSON: {{\"summary\": \"...\", \"key_points\": [\"...\"]}}."
     )
     system = "Ты ассистент руководителя в системе управления задачами. Отвечай кратко и по делу на русском."
-    llm = await _ask_llm(prompt, system)
+    llm = await _ask_llm(prompt, system, json_mode=True)
 
     if llm:
-        try:
-            parsed = json.loads(llm)
+        parsed = extract_json_object(llm)
+        if parsed:
             return {"summary": parsed.get("summary", llm), "key_points": parsed.get("key_points", [])}
-        except json.JSONDecodeError:
-            return {"summary": llm, "key_points": []}
+        return {"summary": llm, "key_points": []}
 
     # Fallback
     today = date.today()
@@ -157,8 +151,13 @@ async def digest(db: Session, scope: str, scope_id: Optional[UUID], period: str 
 # RISKS
 # ---------------------------------------------------------------------------
 
-async def risks(db: Session, scope: str, scope_id: Optional[UUID]) -> dict:
-    tasks = _gather_tasks_for_scope(db, scope, scope_id)
+async def risks(
+    db: Session,
+    scope: str,
+    scope_id: Optional[UUID],
+    current_user: Optional[User] = None,
+) -> dict:
+    tasks = _gather_tasks_for_scope(db, scope, scope_id, current_user)
     today = date.today()
     items = []
 
@@ -195,16 +194,14 @@ async def risks(db: Session, scope: str, scope_id: Optional[UUID]) -> dict:
             f"Для каждой задачи ниже дай краткое пояснение риска на русском (1 предложение):\n{task_lines}\n"
             "Формат JSON: [{\"title\": \"...\", \"reason\": \"...\"}]"
         )
-        llm = await _ask_llm(prompt)
+        llm = await _ask_llm(prompt, json_mode=True)
         if llm:
-            try:
-                enriched = json.loads(llm)
+            enriched = extract_json_array(llm)
+            if enriched:
                 title_map = {e.get("title", ""): e.get("reason", "") for e in enriched}
                 for item in items:
                     if item["title"] in title_map and title_map[item["title"]]:
                         item["reason"] = title_map[item["title"]]
-            except (json.JSONDecodeError, TypeError):
-                pass
 
     return {"items": items}
 
@@ -213,8 +210,15 @@ async def risks(db: Session, scope: str, scope_id: Optional[UUID]) -> dict:
 # OVERLOAD
 # ---------------------------------------------------------------------------
 
-async def overload(db: Session) -> dict:
-    users = db.query(User).filter(User.active == True).all()
+async def overload(db: Session, current_user: Optional[User] = None) -> dict:
+    if current_user:
+        scoped_tasks = apply_task_scope(db.query(Task), current_user, db).all()
+        user_ids = {task.assignee_id for task in scoped_tasks if task.assignee_id}
+        if current_user.role != UserRole.ADMIN:
+            user_ids.add(current_user.id)
+        users = db.query(User).filter(User.active == True, User.id.in_(user_ids)).all() if user_ids else []
+    else:
+        users = db.query(User).filter(User.active == True).all()
     items = []
     for u in users:
         wl = compute_user_workload(db, u.id)
@@ -246,16 +250,14 @@ async def overload(db: Session) -> dict:
             f"Для каждого сотрудника дай краткую рекомендацию на русском:\n{lines}\n"
             "Формат JSON: [{{\"full_name\": \"...\", \"suggestion\": \"...\"}}]"
         )
-        llm = await _ask_llm(prompt)
+        llm = await _ask_llm(prompt, json_mode=True)
         if llm:
-            try:
-                enriched = json.loads(llm)
+            enriched = extract_json_array(llm)
+            if enriched:
                 name_map = {e.get("full_name", ""): e.get("suggestion", "") for e in enriched}
                 for item in items:
                     if item["full_name"] in name_map and name_map[item["full_name"]]:
                         item["suggestion"] = name_map[item["full_name"]]
-            except (json.JSONDecodeError, TypeError):
-                pass
 
     return {"items": items}
 
@@ -272,10 +274,10 @@ async def parse_task(text: str) -> dict:
         "\"assignee_suggestion\": \"имя или null\", \"type\": \"GOAL|EPIC|TASK|SUBTASK\"}\n"
         "Отвечай только JSON."
     )
-    llm = await _ask_llm(prompt)
+    llm = await _ask_llm(prompt, json_mode=True)
     if llm:
-        try:
-            parsed = json.loads(llm)
+        parsed = extract_json_object(llm)
+        if parsed:
             result = {
                 "title": parsed.get("title", text),
                 "description": parsed.get("description"),
@@ -291,8 +293,6 @@ async def parse_task(text: str) -> dict:
                 except ValueError:
                     result["due_date"] = None
             return result
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     # Rule-based fallback
     result = {
@@ -360,10 +360,13 @@ async def suggest_assignee(
     department_id: Optional[UUID],
     priority: Optional[str],
     due_date: Optional[date],
+    current_user: Optional[User] = None,
 ) -> dict:
     q = db.query(User).filter(User.active == True)
     if department_id:
         q = q.filter(User.department_id == department_id)
+    elif current_user and current_user.role == UserRole.EMPLOYEE and current_user.department_id:
+        q = q.filter(User.department_id == current_user.department_id)
     users = q.all()
 
     if not users:
@@ -416,16 +419,14 @@ async def suggest_assignee(
             "Для каждого кандидата дай краткое обоснование (1 предложение) на русском.\n"
             "Формат JSON: [{{\"full_name\": \"...\", \"reason\": \"...\"}}]"
         )
-        llm = await _ask_llm(prompt)
+        llm = await _ask_llm(prompt, json_mode=True)
         if llm:
-            try:
-                enriched = json.loads(llm)
+            enriched = extract_json_array(llm)
+            if enriched:
                 name_map = {e.get("full_name", ""): e.get("reason", "") for e in enriched}
                 for c in top:
                     if c["full_name"] in name_map and name_map[c["full_name"]]:
                         c["reason"] = name_map[c["full_name"]]
-            except (json.JSONDecodeError, TypeError):
-                pass
 
     return {"candidates": top}
 
@@ -487,8 +488,10 @@ def _chat_scope(db: Session, context: Optional[dict], current_user: Optional[Use
     return "all", None, "вся компания"
 
 
-def _scoped_tasks(db: Session, scope: str, scope_id: Optional[UUID]) -> List[Task]:
+def _scoped_tasks(db: Session, scope: str, scope_id: Optional[UUID], current_user: Optional[User] = None) -> List[Task]:
     query = db.query(Task)
+    if current_user:
+        query = apply_task_scope(query, current_user, db)
     if scope == "department" and scope_id:
         query = query.filter(Task.assigned_department_id == scope_id)
     return query.all()
@@ -563,13 +566,26 @@ def _chat_risks_response(tasks: List[Task], scope_label: str) -> str:
     return "\n".join(lines)
 
 
-def _chat_overload_response(db: Session, scope: str, scope_id: Optional[UUID], scope_label: str) -> str:
+def _chat_overload_response(
+    db: Session,
+    scope: str,
+    scope_id: Optional[UUID],
+    scope_label: str,
+    current_user: Optional[User] = None,
+) -> str:
     query = db.query(User).filter(User.active == True)
     if scope == "department" and scope_id:
         query = query.filter(User.department_id == scope_id)
     users = query.all()
+    allowed_user_ids = None
+    if current_user:
+        scoped_tasks = apply_task_scope(db.query(Task), current_user, db).all()
+        allowed_user_ids = {task.assignee_id for task in scoped_tasks if task.assignee_id}
+        allowed_user_ids.add(current_user.id)
     rows = []
     for user in users:
+        if allowed_user_ids is not None and user.id not in allowed_user_ids:
+            continue
         workload = compute_user_workload(db, user.id)
         rows.append((workload["capacity_util"], user, workload))
     rows.sort(key=lambda row: row[0], reverse=True)
@@ -621,9 +637,9 @@ async def chat(db: Session, message: str, context: Optional[dict] = None, curren
     message_lower = message.lower()
 
     if any(word in message_lower for word in ("перегруж", "загруз", "нагруз")):
-        return {"reply": _chat_overload_response(db, scope, scope_id, scope_label)}
+        return {"reply": _chat_overload_response(db, scope, scope_id, scope_label, current_user)}
 
-    tasks = _scoped_tasks(db, scope, scope_id)
+    tasks = _scoped_tasks(db, scope, scope_id, current_user)
 
     if any(word in message_lower for word in ("риск", "риска", "риске", "просроч")):
         return {"reply": _chat_risks_response(tasks, scope_label)}
@@ -766,12 +782,25 @@ def _final_chat_risks(tasks: List[Task], scope_label: str) -> str:
     return "\n".join(lines)
 
 
-def _final_chat_overload(db: Session, scope: str, scope_id: Optional[UUID], scope_label: str) -> str:
+def _final_chat_overload(
+    db: Session,
+    scope: str,
+    scope_id: Optional[UUID],
+    scope_label: str,
+    current_user: Optional[User] = None,
+) -> str:
     query = db.query(User).filter(User.active == True)
     if scope == "department" and scope_id:
         query = query.filter(User.department_id == scope_id)
     rows = []
+    allowed_user_ids = None
+    if current_user:
+        scoped_tasks = apply_task_scope(db.query(Task), current_user, db).all()
+        allowed_user_ids = {task.assignee_id for task in scoped_tasks if task.assignee_id}
+        allowed_user_ids.add(current_user.id)
     for user in query.all():
+        if allowed_user_ids is not None and user.id not in allowed_user_ids:
+            continue
         workload = compute_user_workload(db, user.id)
         rows.append((workload["capacity_util"], user, workload))
     rows.sort(key=lambda row: row[0], reverse=True)
@@ -802,9 +831,9 @@ async def chat(db: Session, message: str, context: Optional[dict] = None, curren
     message_lower = message.lower()
 
     if any(word in message_lower for word in ("перегруж", "загруз", "нагруз")):
-        return {"reply": _final_chat_overload(db, scope, scope_id, scope_label)}
+        return {"reply": _final_chat_overload(db, scope, scope_id, scope_label, current_user)}
 
-    tasks = _scoped_tasks(db, scope, scope_id)
+    tasks = _scoped_tasks(db, scope, scope_id, current_user)
 
     if any(word in message_lower for word in ("риск", "риска", "риске", "просроч")):
         return {"reply": _final_chat_risks(tasks, scope_label)}
@@ -839,12 +868,16 @@ def _collect_descendants(db: Session, task_id: UUID) -> List[Task]:
     return result
 
 
-async def goal_summary(db: Session, goal_id: UUID) -> dict:
+async def goal_summary(db: Session, goal_id: UUID, current_user: Optional[User] = None) -> dict:
     goal = db.get(Task, goal_id)
     if not goal:
         return {"progress": 0, "risks": [], "summary": "Цель не найдена."}
+    if current_user and not user_can_access_task(db, current_user, goal):
+        return {"progress": 0, "risks": [], "summary": "Нет доступа к этой цели."}
 
     descendants = _collect_descendants(db, goal_id)
+    if current_user:
+        descendants = [task for task in descendants if user_can_access_task(db, current_user, task)]
     all_tasks = [goal] + descendants
 
     # Aggregate progress

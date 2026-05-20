@@ -8,6 +8,7 @@ import {
   BarChart3,
   Users,
   Sparkles,
+  MessageCircle,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -34,6 +35,7 @@ const navItems = [
   { path: '/analytics', label: 'Аналитика', icon: BarChart3 },
   { path: '/team', label: 'Команда', icon: Users },
   { path: '/ai', label: 'AI-помощник', icon: Sparkles },
+  { path: '/telegram', label: 'Telegram', icon: MessageCircle },
 ];
 
 export function Sidebar() {

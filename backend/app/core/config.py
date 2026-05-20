@@ -12,6 +12,15 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "docker_model"
     DOCKER_MODEL_URL: str = "http://model-runner.docker.internal"
     OLLAMA_TIMEOUT: int = 30
+    OPENAI_COMPATIBLE_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENAI_COMPATIBLE_API_KEY: str = ""
+    OPENAI_COMPATIBLE_MODEL: str = "qwen/qwen-2.5-7b-instruct"
+    OPENAI_COMPATIBLE_TIMEOUT: int = 60
+    OPENAI_COMPATIBLE_REFERER: str = "http://localhost"
+    OPENAI_COMPATIBLE_APP_TITLE: str = "TTM Task Assistant"
+    OPENAI_COMPATIBLE_PROVIDER_ORDER: str = ""
+    TELEGRAM_INTERNAL_TOKEN: str = "change-me"
+    TELEGRAM_LINK_CODE_TTL_MINUTES: int = 15
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     @property

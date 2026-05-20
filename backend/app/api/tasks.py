@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from app.core.deps import get_db, get_current_user, require_task_access
+from app.core.deps import get_db, get_current_user, require_task_access, apply_task_scope
 from app.models.task import Task, TaskComment
 from app.models.user import User
 from app.models.enums import TaskType, TaskPriority, TaskStatus, UserRole
@@ -51,7 +51,7 @@ def get_tree(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return build_tree(db, root_id)
+    return build_tree(db, root_id, current_user=current_user)
 
 
 @router.get("")
@@ -71,7 +71,7 @@ def list_tasks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Task)
+    query = apply_task_scope(db.query(Task), current_user, db)
 
     if type:
         query = query.filter(Task.type == type)
@@ -113,9 +113,7 @@ def create_task(
 ):
     task_type = body.type or TaskType.TASK
     if body.parent_id:
-        parent = db.get(Task, body.parent_id)
-        if not parent:
-            raise HTTPException(status_code=400, detail="Parent task not found")
+        parent = require_task_access(body.parent_id, db, current_user)
         task_type = infer_child_type(parent.type)
 
     # Auto-set department from assignee if not provided
@@ -162,9 +160,7 @@ def get_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    task = db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = require_task_access(task_id, db, current_user)
 
     out = _task_out(task)
     out["children"] = [_task_out(c) for c in (task.children or [])]
@@ -202,9 +198,7 @@ def update_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    task = db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = require_task_access(task_id, db, current_user)
 
     # RBAC: EMPLOYEE can only update status/progress on own tasks
     if current_user.role == UserRole.EMPLOYEE:
@@ -281,9 +275,7 @@ def delete_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    task = db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = require_task_access(task_id, db, current_user)
     if current_user.role != UserRole.ADMIN and task.created_by_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     db.delete(task)
@@ -297,9 +289,7 @@ def add_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    task = db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = require_task_access(task_id, db, current_user)
 
     comment = TaskComment(
         id=uuid.uuid4(),

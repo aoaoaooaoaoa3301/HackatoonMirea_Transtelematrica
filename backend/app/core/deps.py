@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.core.db import SessionLocal
 from app.core.security import decode_access_token
@@ -59,20 +60,40 @@ def _get_subdepartment_ids(db: Session, dept_id: UUID) -> List[UUID]:
     return result
 
 
+def apply_task_scope(query, current_user: User, db: Session):
+    """Limit a Task query to rows visible for the current user."""
+    if current_user.role == UserRole.ADMIN:
+        return query
+
+    own_task_filter = or_(
+        Task.assignee_id == current_user.id,
+        Task.created_by_id == current_user.id,
+    )
+
+    if current_user.role == UserRole.LEAD:
+        if current_user.department_id:
+            dept_ids = _get_subdepartment_ids(db, current_user.department_id)
+            return query.filter(or_(Task.assigned_department_id.in_(dept_ids), own_task_filter))
+        return query.filter(own_task_filter)
+
+    if current_user.department_id:
+        return query.filter(or_(Task.assigned_department_id == current_user.department_id, own_task_filter))
+
+    return query.filter(own_task_filter)
+
+
+def user_can_access_task(db: Session, current_user: User, task: Task) -> bool:
+    if task is None:
+        return False
+    if current_user.role == UserRole.ADMIN:
+        return True
+    return apply_task_scope(db.query(Task).filter(Task.id == task.id), current_user, db).first() is not None
+
+
 def require_task_access(task_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> Task:
     task = db.get(Task, task_id)
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    if current_user.role == UserRole.ADMIN:
+    if user_can_access_task(db, current_user, task):
         return task
-    if current_user.role == UserRole.LEAD:
-        if current_user.department_id:
-            dept_ids = _get_subdepartment_ids(db, current_user.department_id)
-            if task.assigned_department_id in dept_ids:
-                return task
-        if task.assignee_id == current_user.id or task.created_by_id == current_user.id:
-            return task
-    if current_user.role == UserRole.EMPLOYEE:
-        if task.assignee_id == current_user.id or task.assigned_department_id == current_user.department_id:
-            return task
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this task")
