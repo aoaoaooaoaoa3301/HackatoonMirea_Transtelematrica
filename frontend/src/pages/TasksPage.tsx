@@ -40,27 +40,27 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <Tabs value={tab} onValueChange={(v) => setTab(v as ViewTab)}>
           <TabsList>
-            <TabsTrigger value="strategy" className="gap-2">
+            <TabsTrigger value="strategy" className="gap-1.5 sm:gap-2">
               <Network className="h-4 w-4" />
-              По целям
+              <span className="hidden sm:inline">По целям</span>
             </TabsTrigger>
-            <TabsTrigger value="graph" className="gap-2">
+            <TabsTrigger value="graph" className="gap-1.5 sm:gap-2">
               <GitBranch className="h-4 w-4" />
-              Граф
+              <span className="hidden sm:inline">Граф</span>
             </TabsTrigger>
-            <TabsTrigger value="list" className="gap-2">
+            <TabsTrigger value="list" className="gap-1.5 sm:gap-2">
               <List className="h-4 w-4" />
-              Список
+              <span className="hidden sm:inline">Список</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
         {canCreateTask(user) && (
           <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Создать
+            <Plus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Создать</span>
           </Button>
         )}
       </div>
@@ -90,8 +90,8 @@ export default function TasksPage() {
       {/* List view: flat with filters */}
       {tab === 'list' && (
         <>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
               <TaskFilters filters={filters} onChange={setFilters} />
             </div>
             <div className="flex rounded-md border shrink-0">

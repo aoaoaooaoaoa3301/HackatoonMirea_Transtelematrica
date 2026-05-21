@@ -425,7 +425,7 @@ function TaskOverviewPanel({
 
   return (
     <div
-      className="absolute top-[58px] right-3 bottom-3 w-[340px] z-20 rounded-lg border bg-background/97 backdrop-blur shadow-2xl flex flex-col"
+      className="absolute top-[58px] right-3 bottom-3 left-3 sm:left-auto w-auto sm:w-[340px] z-20 rounded-lg border bg-background/97 backdrop-blur shadow-2xl flex flex-col"
       style={{
         animation: 'ttm-panel-in 280ms cubic-bezier(.2,.7,.3,1) both',
       }}

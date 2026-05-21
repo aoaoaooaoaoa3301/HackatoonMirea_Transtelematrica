@@ -110,7 +110,7 @@ export default function TaskDetailPage() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-8 w-96" />
+        <Skeleton className="h-8 w-full max-w-sm sm:max-w-md" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <Skeleton className="h-48" />
@@ -160,9 +160,9 @@ export default function TaskDetailPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="rounded-lg bg-muted p-3">
-          <TypeIcon className="h-6 w-6 text-muted-foreground" />
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="rounded-lg bg-muted p-2 sm:p-3 shrink-0">
+          <TypeIcon className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -214,8 +214,8 @@ export default function TaskDetailPage() {
             className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 border-rose-500/30 shrink-0"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash2 className="mr-1 h-4 w-4" />
-            Удалить
+            <Trash2 className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Удалить</span>
           </Button>
         )}
       </div>

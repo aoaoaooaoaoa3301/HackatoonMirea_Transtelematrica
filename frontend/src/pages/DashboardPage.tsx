@@ -421,9 +421,9 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {topWorkload?.map((entry) => (
-                  <div key={entry.user_id} className="flex items-center gap-3">
-                    <span className="text-sm w-36 truncate">{entry.full_name}</span>
-                    <div className="flex-1">
+                  <div key={entry.user_id} className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+                    <span className="text-sm w-full sm:w-36 truncate">{entry.full_name}</span>
+                    <div className="flex-1 min-w-0">
                       <Progress
                         value={Math.min(entry.capacity_util, 150)}
                         max={150}
@@ -431,10 +431,10 @@ export default function DashboardPage() {
                         indicatorClassName={getCapacityBgColor(entry.capacity_util)}
                       />
                     </div>
-                    <span className={`text-sm font-medium w-12 text-right ${getCapacityColor(entry.capacity_util)}`}>
+                    <span className={`text-sm font-medium w-12 text-right shrink-0 ${getCapacityColor(entry.capacity_util)}`}>
                       {Math.round(entry.capacity_util)}%
                     </span>
-                    <div className="flex gap-2 text-xs text-muted-foreground w-32">
+                    <div className="hidden sm:flex gap-2 text-xs text-muted-foreground w-32 shrink-0">
                       <span>{entry.open_tasks} задач</span>
                       {entry.overdue > 0 && (
                         <span className="text-rose-500">{entry.overdue} просроч.</span>

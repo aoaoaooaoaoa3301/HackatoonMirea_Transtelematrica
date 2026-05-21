@@ -29,7 +29,8 @@ export function WorkloadHeatmap({ data }: WorkloadHeatmapProps) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Загруженность команды</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-x-auto">
+        <div className="min-w-[480px]">
         <ResponsiveContainer width="100%" height={Math.max(280, sorted.length * 36)}>
           <BarChart data={sorted} layout="vertical" margin={{ left: 20 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
@@ -62,6 +63,7 @@ export function WorkloadHeatmap({ data }: WorkloadHeatmapProps) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

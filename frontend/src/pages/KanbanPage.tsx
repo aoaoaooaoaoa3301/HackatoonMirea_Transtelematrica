@@ -69,7 +69,7 @@ export default function KanbanPage() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={departmentId || '_all'} onValueChange={(v) => { setDepartmentId(v === '_all' ? '' : v); setAssigneeId(''); }}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Все отделы" />
           </SelectTrigger>
           <SelectContent>
@@ -81,7 +81,7 @@ export default function KanbanPage() {
         </Select>
 
         <Select value={assigneeId || '_all'} onValueChange={(v) => setAssigneeId(v === '_all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Все исполнители" />
           </SelectTrigger>
           <SelectContent>
@@ -93,7 +93,7 @@ export default function KanbanPage() {
         </Select>
 
         <Select value={taskType || '_all'} onValueChange={(v) => setTaskType(v === '_all' ? '' : v)}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Все типы" />
           </SelectTrigger>
           <SelectContent>
@@ -106,8 +106,8 @@ export default function KanbanPage() {
 
         <div className="flex-1" />
         <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Создать
+          <Plus className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Создать</span>
         </Button>
       </div>
 

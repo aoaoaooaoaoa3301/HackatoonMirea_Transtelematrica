@@ -189,7 +189,7 @@ export default function AnalyticsPage() {
                   const source = delegation.nodes.find((n) => n.id === link.source);
                   const target = delegation.nodes.find((n) => n.id === link.target);
                   return (
-                    <div key={i} className="flex items-center gap-3 text-sm">
+                    <div key={i} className="flex items-center gap-2 sm:gap-3 text-sm flex-wrap">
                       <span className="font-medium">{source?.name ?? link.source}</span>
                       <span className="text-muted-foreground">создал</span>
                       <span className="font-bold text-primary">{link.value}</span>
