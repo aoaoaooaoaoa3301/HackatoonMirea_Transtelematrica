@@ -124,7 +124,7 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
 
           <div>
             {/* Progress (for non-subtasks) */}
-            {task.type !== 'SUBTASK' && task.progress > 0 && (
+            
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[11px] text-muted-foreground">Прогресс</span>
@@ -132,7 +132,7 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
                 </div>
                 <Progress value={task.progress} className="h-1.5" />
               </div>
-            )}
+            
 
             {/* Assignee row */}
             {assigneeName && (
