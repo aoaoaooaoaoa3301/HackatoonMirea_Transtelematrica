@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
-import { Send, Loader2, Sparkles, Bot, User, Trash2 } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -29,6 +29,8 @@ interface AIChatPanelProps {
   contextDeptId?: string;
 }
 
+type ModelInfo = { provider: string; name: string; available: boolean };
+
 export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | undefined>(() => {
     try {
@@ -39,6 +41,8 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
   });
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
+  const [mode, setMode] = useState<'normal' | 'degraded' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const conversationQuery = useQuery({
@@ -59,6 +63,8 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
     onSuccess: (data) => {
       setConversationId(data.conversation_id);
       localStorage.setItem(CONVERSATION_STORAGE_KEY, data.conversation_id);
+      setModelInfo(data.model ?? null);
+      setMode(data.mode ?? null);
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: data.text, buttons: data.buttons },
@@ -136,6 +142,8 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
     if (conversationQuery.data) {
       setConversationId(conversationQuery.data.conversation_id);
       localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationQuery.data.conversation_id);
+      setModelInfo(conversationQuery.data.model ?? null);
+      setMode(conversationQuery.data.mode ?? null);
       setMessages(
         conversationQuery.data.messages
           .filter((message) => message.role === 'user' || message.role === 'assistant')
@@ -143,6 +151,12 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
       );
     }
   }, [conversationQuery.data]);
+
+  // Honest status badge: green when a real model answered, amber when we
+  // fell back to deterministic rules (no/unavailable LLM). Surfacing this
+  // builds trust — the assistant never pretends to be smarter than it is.
+  const degraded = mode === 'degraded' || (modelInfo != null && !modelInfo.available);
+  const modelLabel = modelInfo?.name || modelInfo?.provider;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -152,13 +166,47 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header — assistant identity + honest model/mode status */}
+      <div className="flex items-center gap-3 border-b px-4 py-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#269AE6] to-[#8B5CF6] text-white shadow-sm">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold leading-tight">AI-помощник Транстелематики</div>
+          <div className="text-[11px] text-muted-foreground truncate">
+            Анализ задач, рисков и загрузки команды
+          </div>
+        </div>
+        <div className="ml-auto">
+          {degraded ? (
+            <Badge
+              variant="outline"
+              className="gap-1 border-amber-500/40 text-amber-500 text-[10px]"
+              title="LLM недоступна — ответы строятся по правилам"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Демо-режим · правила
+            </Badge>
+          ) : modelLabel ? (
+            <Badge
+              variant="outline"
+              className="gap-1 border-emerald-500/40 text-emerald-500 text-[10px]"
+              title={`Провайдер: ${modelInfo?.provider}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {modelLabel}
+            </Badge>
+          ) : null}
+        </div>
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4" ref={scrollRef}>
         <div className="max-w-3xl mx-auto py-6 space-y-6">
           {messages.length === 0 && (
             <div className="text-center py-16">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mb-4">
-                <Sparkles className="h-8 w-8 text-primary" />
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#269AE6] to-[#8B5CF6] text-white mb-4 shadow-lg shadow-primary/20">
+                <Sparkles className="h-8 w-8" />
               </div>
               <h2 className="text-xl font-semibold mb-2">AI-помощник</h2>
               <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto">
@@ -186,8 +234,8 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
             >
               {msg.role === 'assistant' && (
                 <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className="bg-primary/10">
-                    <Bot className="h-4 w-4" />
+                  <AvatarFallback className="bg-gradient-to-br from-[#269AE6] to-[#8B5CF6] text-white">
+                    <Sparkles className="h-4 w-4" />
                   </AvatarFallback>
                 </Avatar>
               )}
@@ -236,8 +284,8 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
           {(chatMutation.isPending || conversationQuery.isLoading || actionMutation.isPending) && (
             <div className="flex gap-3">
               <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback className="bg-primary/10">
-                  <Bot className="h-4 w-4" />
+                <AvatarFallback className="bg-gradient-to-br from-[#269AE6] to-[#8B5CF6] text-white">
+                  <Sparkles className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
               <div className="bg-muted rounded-lg px-4 py-3">
