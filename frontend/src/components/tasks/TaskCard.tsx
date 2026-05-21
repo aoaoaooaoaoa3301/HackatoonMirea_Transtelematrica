@@ -94,10 +94,10 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
   return (
     <Link to={`/tasks/${task.id}`} className="block">
       <Card className={cn(
-        'hover:shadow-md transition-shadow cursor-pointer group overflow-hidden',
+        'hover:shadow-md transition-shadow cursor-pointer group overflow-hidden h-full',
         getPriorityBorderClass(task.priority)
       )}>
-        <CardContent className="p-4">
+        <CardContent className="flex flex-col p-4 h-full justify-between">
           {/* Top row: status badge left, period badge right */}
           <div className="flex items-center justify-between mb-3">
             <Badge className={cn(
@@ -113,57 +113,60 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
               </Badge>
             )}
           </div>
+          <div>
+            {/* Title */}
+            <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-3">
+              {task.title}
+            </h3>
 
-          {/* Title */}
-          <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-3">
-            {task.title}
-          </h3>
-
-          {/* Progress (for non-subtasks) */}
-          {task.type !== 'SUBTASK' && task.progress > 0 && (
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] text-muted-foreground">Прогресс</span>
-                <span className="text-[11px] text-muted-foreground">{task.progress}%</span>
-              </div>
-              <Progress value={task.progress} className="h-1.5" />
-            </div>
-          )}
-
-          {/* Assignee row */}
-          {assigneeName && (
-            <div className="flex items-center gap-2 mb-3">
-              <Avatar className="h-6 w-6">
-                <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col min-w-0">
-                <span className="text-[12px] font-medium truncate">
-                  {assigneeName}
-                </span>
-                {departmentName && (
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {departmentName}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Bottom row: priority + date */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Flag className={cn('h-3 w-3', priorityColor.text)} />
-              <span className={cn('text-[11px] font-medium', priorityColor.text)}>
-                {PRIORITY_LABELS[task.priority]}
-              </span>
-            </div>
-            {task.due_date && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Calendar className="h-3 w-3" />
-                <span className="text-[11px]">{formatDateShort(task.due_date)}</span>
+            {/* Progress (for non-subtasks) */}
+            {task.type !== 'SUBTASK' && task.progress > 0 && (
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-muted-foreground">Прогресс</span>
+                  <span className="text-[11px] text-muted-foreground">{task.progress}%</span>
+                </div>
+                <Progress value={task.progress} className="h-1.5" />
               </div>
             )}
+
+            {/* Assignee row */}
+            {assigneeName && (
+              <div className="flex items-center gap-2 mb-3">
+                <Avatar className="h-6 w-6">
+                  <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[12px] font-medium truncate">
+                    {assigneeName}
+                  </span>
+                  {departmentName && (
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {departmentName}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom row: priority + date */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Flag className={cn('h-3 w-3', priorityColor.text)} />
+                <span className={cn('text-[11px] font-medium', priorityColor.text)}>
+                  {PRIORITY_LABELS[task.priority]}
+                </span>
+              </div>
+              {task.due_date && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
+                  <span className="text-[11px]">{formatDateShort(task.due_date)}</span>
+                </div>
+              )}
+            </div>
+
           </div>
+
         </CardContent>
       </Card>
     </Link>
