@@ -69,8 +69,11 @@ def _build_stats_text(tasks: List[Task]) -> str:
     today = date.today()
     total = len(tasks)
     by_status = {}
+    by_status_display = {}
     for t in tasks:
         by_status[t.status.value] = by_status.get(t.status.value, 0) + 1
+        status_name = _status_label(t.status)
+        by_status_display[status_name] = by_status_display.get(status_name, 0) + 1
     at_risk = sum(
         1 for t in tasks
         if t.due_date and 0 < (t.due_date - today).days <= 3 and t.status != TaskStatus.DONE
@@ -84,7 +87,7 @@ def _build_stats_text(tasks: List[Task]) -> str:
     lines = [
         f"Всего задач: {total}, активных: {active}, выполнено: {done}.",
         f"Просроченных: {overdue}, в зоне риска (<=3 дня): {at_risk}.",
-        "По статусам: " + ", ".join(f"{k}: {v}" for k, v in by_status.items()) + ".",
+        "По статусам: " + ", ".join(f"{k}: {v}" for k, v in by_status_display.items()) + ".",
     ]
     return "\n".join(lines)
 
@@ -176,7 +179,7 @@ async def risks(
             continue
 
         reason_fallback = (
-            f"До дедлайна осталось {days_left} дн., статус: {t.status.value}, "
+            f"До дедлайна осталось {days_left} дн., статус: {_status_label(t.status)}, "
             f"прогресс: {t.progress}%."
         )
         items.append({
@@ -448,8 +451,8 @@ async def chat(db: Session, message: str, context: Optional[dict] = None) -> dic
             task = db.get(Task, UUID(str(context["task_id"])))
             if task:
                 context_text += (
-                    f"\nКонтекст задачи: \"{task.title}\", статус: {task.status.value}, "
-                    f"прогресс: {task.progress}%, приоритет: {task.priority.value}."
+                    f"\nКонтекст задачи: \"{task.title}\", статус: {_status_label(task.status)}, "
+                    f"прогресс: {task.progress}%, приоритет: {_priority_label(task.priority)}."
                 )
         if context.get("department_id"):
             dept = db.get(Department, UUID(str(context["department_id"])))
@@ -502,8 +505,8 @@ def _task_line(task: Task) -> str:
     assignee = task.assignee.full_name if task.assignee else "не назначен"
     due = task.due_date.isoformat() if task.due_date else "без срока"
     return (
-        f"- {task.title}: {task.status.value}, прогресс {task.progress}%, "
-        f"приоритет {task.priority.value}, срок {due}, исполнитель {assignee}"
+        f"- {task.title}: {_status_label(task.status)}, прогресс {task.progress}%, "
+        f"приоритет {_priority_label(task.priority)}, срок {due}, исполнитель {assignee}"
     )
 
 
@@ -561,7 +564,7 @@ def _chat_risks_response(tasks: List[Task], scope_label: str) -> str:
     for level, _, task, reason in risk_rows[:10]:
         assignee = task.assignee.full_name if task.assignee else "не назначен"
         lines.append(
-            f"- [{level}] {task.title}: {reason}, статус {task.status.value}, "
+            f"- [{level}] {task.title}: {reason}, статус {_status_label(task.status)}, "
             f"прогресс {task.progress}%, исполнитель {assignee}."
         )
     return "\n".join(lines)
@@ -616,7 +619,8 @@ def _chat_context_text(tasks: List[Task], scope_label: str) -> str:
 
     status_counts = {}
     for task in tasks:
-        status_counts[task.status.value] = status_counts.get(task.status.value, 0) + 1
+        status_name = _status_label(task.status)
+        status_counts[status_name] = status_counts.get(status_name, 0) + 1
 
     lines = [
         f"Область анализа: {scope_label}.",
@@ -653,8 +657,8 @@ async def chat(db: Session, message: str, context: Optional[dict] = None, curren
         task = db.get(Task, UUID(str(context["task_id"])))
         if task:
             context_text += (
-                f"\nКонтекст выбранной задачи: \"{task.title}\", статус: {task.status.value}, "
-                f"прогресс: {task.progress}%, приоритет: {task.priority.value}."
+                f"\nКонтекст выбранной задачи: \"{task.title}\", статус: {_status_label(task.status)}, "
+                f"прогресс: {task.progress}%, приоритет: {_priority_label(task.priority)}."
             )
 
     prompt = context_text + "\n\nВопрос пользователя: " + message
@@ -909,7 +913,7 @@ async def goal_summary(db: Session, goal_id: UUID, current_user: Optional[User] 
 
     # LLM summary
     task_lines = "\n".join(
-        f"- {t.title}: {t.status.value}, прогресс {t.progress}%"
+        f"- {t.title}: {_status_label(t.status)}, прогресс {t.progress}%"
         for t in all_tasks[:20]
     )
     prompt = (
@@ -1005,7 +1009,8 @@ def _task_context_for_chat(tasks: List[Task], scope_label: str, message: str) ->
 
     status_counts = {}
     for task in tasks:
-        status_counts[task.status.value] = status_counts.get(task.status.value, 0) + 1
+        status_name = _status_label(task.status)
+        status_counts[status_name] = status_counts.get(status_name, 0) + 1
 
     lines = [
         f"Область данных: {scope_label}.",

@@ -16,7 +16,7 @@ from app.schemas.telegram import (
     TelegramLinkStartResponse,
     TelegramStatusResponse,
 )
-from app.services.assistant_orchestrator import execute_pending_action, handle_message
+from app.services import assistant_agent
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
@@ -128,17 +128,17 @@ async def telegram_command(body: TelegramCommandRequest, db: Session = Depends(g
         return {"text": "Связанный пользователь не найден или отключён.", "buttons": []}
 
     session = _get_or_create_session(db, body.telegram_user_id, user.id)
-    response = await handle_message(db, user, body.message, channel="telegram", session=session)
-    session.last_task_ids = [str(task_id) for task_id in response.task_ids]
+    response = await assistant_agent.process_message(
+        db,
+        user,
+        body.message,
+        channel="telegram",
+        external_chat_id=str(body.telegram_user_id),
+    )
+    session.last_task_ids = [str(task_id) for task_id in response.referenced_task_ids]
     session.pending_action = response.pending_action
-    session.last_intent = response.intent
-    session.last_scope = response.scope
-    history = list(session.chat_history or [])
-    history.extend([
-        {"role": "user", "content": body.message},
-        {"role": "assistant", "content": response.text},
-    ])
-    session.chat_history = history[-20:]
+    session.last_intent = "assistant"
+    session.last_scope = {"mode": response.mode}
     db.add(session)
     db.commit()
     return {"text": response.text, "buttons": response.buttons}
@@ -162,9 +162,33 @@ async def confirm_action(body: TelegramConfirmActionRequest, db: Session = Depen
     )
     if not session:
         session = _get_or_create_session(db, body.telegram_user_id, account.user_id)
-    response = await execute_pending_action(db, user, session, body.callback_data)
-    if response.task_ids:
-        session.last_task_ids = [str(task_id) for task_id in response.task_ids]
+
+    callback_data = body.callback_data or ""
+    confirm = not callback_data.startswith("cancel")
+    action_id = None
+    if ":" in callback_data:
+        _, raw_id = callback_data.split(":", 1)
+        try:
+            import uuid
+
+            action_id = uuid.UUID(raw_id)
+        except ValueError:
+            action_id = None
+    if not action_id:
+        conversation = assistant_agent._get_or_create_conversation(
+            db,
+            user,
+            channel="telegram",
+            external_chat_id=str(body.telegram_user_id),
+        )
+        pending = assistant_agent.latest_pending_action(db, conversation)
+        action_id = pending.id if pending else None
+    if not action_id:
+        return {"text": "Нет действия, ожидающего подтверждения. Возможно, оно уже было выполнено или отменено.", "buttons": []}
+
+    response = await assistant_agent.confirm_action(db, user, action_id, confirm=confirm)
+    if response.referenced_task_ids:
+        session.last_task_ids = [str(task_id) for task_id in response.referenced_task_ids]
         db.add(session)
         db.commit()
     return {"text": response.text, "buttons": response.buttons}

@@ -69,6 +69,16 @@ export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'Администратор',
 };
 
+export const TASK_EVENT_LABELS: Record<string, string> = {
+  created: 'Создана',
+  delegated: 'Назначен исполнитель',
+  assignee_changed: 'Изменён исполнитель',
+  assignment_changed: 'Изменено назначение',
+  status_changed: 'Изменён статус',
+  progress_updated: 'Обновлён прогресс',
+  comment_added: 'Добавлен комментарий',
+};
+
 export const ALL_STATUSES: Status[] = ['NEW', 'IN_PROGRESS', 'REVIEW', 'DONE', 'OVERDUE'];
 export const ALL_PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 export const ALL_TASK_TYPES: TaskType[] = ['GOAL', 'EPIC', 'TASK', 'SUBTASK'];

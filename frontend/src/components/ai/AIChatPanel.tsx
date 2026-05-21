@@ -1,15 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import { Send, Loader2, Sparkles, Bot, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { chat } from '@/api/ai';
+import {
+  cancelAssistantAction,
+  confirmAssistantAction,
+  getAssistantConversation,
+  sendAssistantMessage,
+} from '@/api/ai';
 import type { AIChatMessage } from '@/types';
 
-const STORAGE_KEY = 'ttm-ai-chat-messages';
+const CONVERSATION_STORAGE_KEY = 'ttm-ai-assistant-conversation-id';
 
 const quickActions = [
   { label: 'Сводка по моей команде', message: 'Дай сводку по задачам моей команды за эту неделю' },
@@ -24,30 +29,39 @@ interface AIChatPanelProps {
 }
 
 export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanelProps) {
-  const [messages, setMessages] = useState<AIChatMessage[]>(() => {
+  const [conversationId, setConversationId] = useState<string | undefined>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      const parsed = saved ? JSON.parse(saved) : [];
-      return Array.isArray(parsed) ? parsed.slice(-40) : [];
+      return localStorage.getItem(CONVERSATION_STORAGE_KEY) || undefined;
     } catch {
-      return [];
+      return undefined;
     }
   });
+  const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const conversationQuery = useQuery({
+    queryKey: ['assistant-conversation', conversationId],
+    queryFn: () => getAssistantConversation(conversationId),
+  });
+
   const chatMutation = useMutation({
     mutationFn: (message: string) =>
-      chat({
+      sendAssistantMessage({
         message,
-        history: messages.slice(-20),
+        conversation_id: conversationId,
         context:
           contextScope === 'department' && contextDeptId
             ? { department_id: contextDeptId }
             : undefined,
       }),
     onSuccess: (data) => {
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      setConversationId(data.conversation_id);
+      localStorage.setItem(CONVERSATION_STORAGE_KEY, data.conversation_id);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: data.text, buttons: data.buttons },
+      ]);
     },
     onError: () => {
       setMessages((prev) => [
@@ -56,6 +70,32 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
           role: 'assistant',
           content: 'Извините, произошла ошибка. Попробуйте ещё раз.',
         },
+      ]);
+    },
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: ({ callbackData }: { callbackData: string }) => {
+      const [kind, actionId] = callbackData.split(':');
+      if (!actionId) {
+        throw new Error('Invalid action callback');
+      }
+      return kind === 'cancel' ? cancelAssistantAction(actionId) : confirmAssistantAction(actionId);
+    },
+    onMutate: ({ callbackData }) => {
+      const isCancel = callbackData.startsWith('cancel');
+      setMessages((prev) => [
+        ...prev.map((message) => ({ ...message, buttons: undefined })),
+        { role: 'user', content: isCancel ? 'Отмена' : 'Подтверждаю' },
+      ]);
+    },
+    onSuccess: (data) => {
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.text, buttons: data.buttons }]);
+    },
+    onError: () => {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Не удалось выполнить действие. Попробуйте ещё раз.' },
       ]);
     },
   });
@@ -69,10 +109,21 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
   };
 
   useEffect(() => {
+    if (conversationQuery.data) {
+      setConversationId(conversationQuery.data.conversation_id);
+      localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationQuery.data.conversation_id);
+      setMessages(
+        conversationQuery.data.messages
+          .filter((message) => message.role === 'user' || message.role === 'assistant')
+          .map((message) => ({ role: message.role, content: message.content }))
+      );
+    }
+  }, [conversationQuery.data]);
+
+  useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-40)));
   }, [messages]);
 
   return (
@@ -124,9 +175,26 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
                 }`}
               >
                 {msg.role === 'assistant' ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-headings:mb-2 prose-headings:mt-0 prose-h2:text-base prose-h3:text-sm prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-li:pl-1 prose-strong:text-foreground">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
+                  <>
+                    <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-headings:mb-2 prose-headings:mt-0 prose-h2:text-base prose-h3:text-sm prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-li:pl-1 prose-strong:text-foreground">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                    {msg.buttons && msg.buttons.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {msg.buttons.map((button) => (
+                          <Button
+                            key={button.callback_data}
+                            size="sm"
+                            variant={button.callback_data.startsWith('cancel') ? 'outline' : 'default'}
+                            disabled={actionMutation.isPending}
+                            onClick={() => actionMutation.mutate({ callbackData: button.callback_data })}
+                          >
+                            {button.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <p className="text-sm">{msg.content}</p>
                 )}
@@ -141,7 +209,7 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
             </div>
           ))}
 
-          {chatMutation.isPending && (
+          {(chatMutation.isPending || conversationQuery.isLoading || actionMutation.isPending) && (
             <div className="flex gap-3">
               <Avatar className="h-8 w-8 shrink-0">
                 <AvatarFallback className="bg-primary/10">
@@ -151,7 +219,7 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
               <div className="bg-muted rounded-lg px-4 py-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Думаю...
+                  {actionMutation.isPending ? 'Выполняю...' : 'Думаю...'}
                 </div>
               </div>
             </div>

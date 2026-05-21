@@ -40,6 +40,7 @@ import {
   TASK_TYPE_LABELS,
   ALL_STATUSES,
   ALL_PRIORITIES,
+  TASK_EVENT_LABELS,
 } from '@/lib/statusUtils';
 import { formatDate, formatDateTime, formatRelative } from '@/lib/dateUtils';
 import type { TaskType, Status, Priority } from '@/types';
@@ -471,7 +472,9 @@ export default function TaskDetailPage() {
                     <div key={event.id} className="flex items-start gap-2 text-xs">
                       <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground mt-1.5 shrink-0" />
                       <div>
-                        <span className="text-muted-foreground">{event.event_type}</span>
+                        <span className="text-muted-foreground">
+                          {TASK_EVENT_LABELS[event.event_type] ?? event.event_type}
+                        </span>
                         <span className="text-muted-foreground/60 ml-2">
                           {formatRelative(event.at)}
                         </span>

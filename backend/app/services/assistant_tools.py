@@ -38,6 +38,61 @@ ORDINALS = {
     "5": 5,
 }
 
+STATUS_LABELS = {
+    TaskStatus.NEW: "новая",
+    TaskStatus.IN_PROGRESS: "в работе",
+    TaskStatus.REVIEW: "на согласовании",
+    TaskStatus.DONE: "выполнена",
+    TaskStatus.OVERDUE: "просрочена",
+}
+
+PRIORITY_LABELS = {
+    TaskPriority.LOW: "низкий",
+    TaskPriority.MEDIUM: "средний",
+    TaskPriority.HIGH: "высокий",
+    TaskPriority.CRITICAL: "критический",
+}
+
+TASK_TYPE_LABELS = {
+    TaskType.GOAL: "цель",
+    TaskType.EPIC: "эпик",
+    TaskType.TASK: "задача",
+    TaskType.SUBTASK: "подзадача",
+}
+
+
+def status_label(status: TaskStatus | str | None) -> str:
+    if isinstance(status, TaskStatus):
+        return STATUS_LABELS.get(status, status.value)
+    if isinstance(status, str):
+        try:
+            return STATUS_LABELS.get(TaskStatus(status), status.lower())
+        except ValueError:
+            return status
+    return str(status or "не указан")
+
+
+def priority_label(priority: TaskPriority | str | None) -> str:
+    if isinstance(priority, TaskPriority):
+        return PRIORITY_LABELS.get(priority, priority.value.lower())
+    if isinstance(priority, str):
+        try:
+            return PRIORITY_LABELS.get(TaskPriority(priority), priority.lower())
+        except ValueError:
+            return priority
+    return "не указан"
+
+
+def task_type_label(task_type: TaskType | str | None) -> str:
+    if isinstance(task_type, TaskType):
+        return TASK_TYPE_LABELS.get(task_type, task_type.value.lower())
+    if isinstance(task_type, str):
+        try:
+            return TASK_TYPE_LABELS.get(TaskType(task_type), task_type.lower())
+        except ValueError:
+            return task_type
+    return "не указан"
+
 
 def scoped_task_query(db: Session, user: User):
     return apply_task_scope(db.query(Task), user, db)
@@ -48,8 +103,8 @@ def task_to_line(task: Task, index: Optional[int] = None) -> str:
     due = task.due_date.strftime("%d.%m.%Y") if task.due_date else "без срока"
     assignee = task.assignee.full_name if task.assignee else "не назначен"
     return (
-        f"{prefix}{task.title} — статус {task.status.value}, прогресс {task.progress}%, "
-        f"срок {due}, исполнитель {assignee}"
+        f"{prefix}{task.title} — статус {status_label(task.status)}, прогресс {task.progress}%, "
+        f"приоритет {priority_label(task.priority)}, срок {due}, исполнитель {assignee}"
     )
 
 
@@ -200,7 +255,7 @@ def format_create_task_draft(draft: dict) -> str:
         f"- Родительская задача: {draft.get('parent_title') or 'нет'}",
         f"- Дедлайн: {draft.get('due_date') or 'не указан'}",
         f"- Отдел/сотрудник: {draft.get('assignee_name') or draft.get('department_name') or 'не указан'}",
-        f"- Приоритет: {draft.get('priority') or 'не указан'}",
+        f"- Приоритет: {priority_label(draft.get('priority'))}",
         f"- Комментарий: {draft.get('comment') or 'не указан, это опционально'}",
     ]
     return "\n".join(lines)
@@ -334,10 +389,10 @@ def complete_task(db: Session, user: User, task_id: UUID) -> Task:
     task = db.get(Task, task_id)
     if not task or not user_can_access_task(db, user, task):
         raise PermissionError("No access to task")
-    old_status = task.status.value
+    old_status = status_label(task.status)
     task.status = TaskStatus.DONE
     task.progress = 100
-    log_history(db, task.id, "status_changed", user.id, {"old": old_status, "new": TaskStatus.DONE.value, "channel": "telegram"})
+    log_history(db, task.id, "status_changed", user.id, {"old": old_status, "new": status_label(TaskStatus.DONE), "channel": "telegram"})
     db.commit()
     db.refresh(task)
     recompute_parent_progress(db, task)
@@ -690,7 +745,7 @@ def format_create_task_draft(draft: dict) -> str:
         f"- Родительская задача: {draft.get('parent_title') or 'нет'}",
         f"- Дедлайн: {draft.get('due_date') or 'не указан'}",
         f"- Отдел/сотрудник: {assignee_or_department}",
-        f"- Приоритет: {draft.get('priority') or 'не указан'}",
+        f"- Приоритет: {priority_label(draft.get('priority'))}",
         f"- Комментарий: {draft.get('comment') or 'не указан, это опционально'}",
     ]
     return "\n".join(lines)

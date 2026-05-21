@@ -65,6 +65,67 @@ export async function chat(params: {
   return res.data;
 }
 
+export interface AssistantButton {
+  label: string;
+  callback_data: string;
+}
+
+export interface AssistantMessageResponse {
+  conversation_id: string;
+  message_id?: string;
+  text: string;
+  buttons: AssistantButton[];
+  pending_action?: Record<string, unknown> | null;
+  referenced_task_ids: string[];
+  mode: 'normal' | 'degraded';
+  model: {
+    provider: string;
+    name: string;
+    available: boolean;
+  };
+}
+
+export interface AssistantConversationResponse {
+  conversation_id: string;
+  messages: Array<{ id: string; role: 'user' | 'assistant'; content: string }>;
+  mode: 'normal' | 'degraded';
+  model: {
+    provider: string;
+    name: string;
+    available: boolean;
+  };
+}
+
+export async function getAssistantConversation(conversationId?: string): Promise<AssistantConversationResponse> {
+  const res = await apiClient.get<AssistantConversationResponse>('/ai/assistant/conversation', {
+    params: conversationId ? { conversation_id: conversationId } : undefined,
+  });
+  return res.data;
+}
+
+export async function sendAssistantMessage(params: {
+  message: string;
+  conversation_id?: string;
+  context?: { task_id?: string; department_id?: string };
+}): Promise<AssistantMessageResponse> {
+  const res = await apiClient.post<AssistantMessageResponse>('/ai/assistant/message', params);
+  return res.data;
+}
+
+export async function confirmAssistantAction(actionId: string): Promise<{ text: string; buttons: AssistantButton[] }> {
+  const res = await apiClient.post<{ text: string; buttons: AssistantButton[] }>(
+    `/ai/assistant/actions/${actionId}/confirm`
+  );
+  return res.data;
+}
+
+export async function cancelAssistantAction(actionId: string): Promise<{ text: string; buttons: AssistantButton[] }> {
+  const res = await apiClient.post<{ text: string; buttons: AssistantButton[] }>(
+    `/ai/assistant/actions/${actionId}/cancel`
+  );
+  return res.data;
+}
+
 export async function getGoalSummary(goalId: string): Promise<AIGoalSummary> {
   const res = await apiClient.post<AIGoalSummary>('/ai/goal-summary', { goal_id: goalId });
   return res.data;

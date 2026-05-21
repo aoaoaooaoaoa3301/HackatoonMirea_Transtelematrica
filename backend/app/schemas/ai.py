@@ -4,6 +4,7 @@ from typing import Optional, List
 from datetime import date
 
 from app.models.enums import TaskPriority, TaskType
+from app.schemas.assistant import AssistantActionButton
 
 
 class DigestRequest(BaseModel):
@@ -84,6 +85,49 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+class AssistantModelState(BaseModel):
+    provider: str
+    name: str
+    available: bool
+
+
+class AssistantMessageRequest(BaseModel):
+    message: str
+    conversation_id: Optional[UUID] = None
+    client_message_id: Optional[str] = None
+    context: Optional[dict] = None
+
+
+class AssistantStoredMessage(BaseModel):
+    id: UUID
+    role: str
+    content: str
+
+
+class AssistantMessageResponse(BaseModel):
+    conversation_id: UUID
+    message_id: Optional[UUID] = None
+    text: str
+    buttons: List[AssistantActionButton] = []
+    pending_action: Optional[dict] = None
+    referenced_task_ids: List[UUID] = []
+    mode: str = "normal"
+    model: AssistantModelState
+
+
+class AssistantConversationResponse(BaseModel):
+    conversation_id: UUID
+    messages: List[AssistantStoredMessage] = []
+    mode: str = "normal"
+    model: AssistantModelState
+
+
+class AssistantConfirmResponse(BaseModel):
+    text: str
+    buttons: List[AssistantActionButton] = []
+    referenced_task_ids: List[UUID] = []
 
 
 class GoalSummaryResponse(BaseModel):
