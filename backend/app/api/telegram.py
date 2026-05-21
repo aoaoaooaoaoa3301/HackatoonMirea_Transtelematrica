@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
+from app.models.task import Task
 from app.models.telegram import TelegramAccount, TelegramLinkCode, TelegramSession
 from app.models.user import User
 from app.schemas.telegram import (
+    TaskLink,
     TelegramCommandRequest,
     TelegramCommandResponse,
     TelegramConfirmActionRequest,
@@ -19,6 +21,29 @@ from app.schemas.telegram import (
 from app.services import assistant_agent
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
+
+
+def _build_task_links(db: Session, task_ids) -> list[TaskLink]:
+    """Resolve referenced task IDs into clickable web-app links.
+
+    A task that's created or mentioned by the assistant comes back as a UUID;
+    here we look up its title and turn it into {id, title, url} so the bot can
+    render it as a tappable button that opens the task in the web app.
+    """
+    links: list[TaskLink] = []
+    seen: set = set()
+    base = settings.APP_PUBLIC_URL.rstrip("/")
+    for tid in task_ids or []:
+        if tid in seen:
+            continue
+        seen.add(tid)
+        task = db.get(Task, tid)
+        if not task:
+            continue
+        links.append(TaskLink(id=str(task.id), title=task.title, url=f"{base}/tasks/{task.id}"))
+        if len(links) >= 8:
+            break
+    return links
 
 
 def require_telegram_internal_token(x_telegram_internal_token: str | None = Header(None)) -> None:
@@ -86,10 +111,18 @@ def start_telegram_link(
     entry = TelegramLinkCode(code=code, user_id=current_user.id, expires_at=expires_at)
     db.add(entry)
     db.commit()
+
+    bot_username = (settings.TELEGRAM_BOT_USERNAME or "").lstrip("@")
+    deep_link = f"https://t.me/{bot_username}?start={code}" if bot_username else None
     return {
         "code": code,
         "expires_at": expires_at,
-        "instruction": f"Откройте Telegram-бота и отправьте /link {code}",
+        "instruction": (
+            "Отсканируйте QR-код или нажмите кнопку — бот привяжется автоматически. "
+            f"Либо отправьте боту /link {code}"
+        ),
+        "deep_link": deep_link,
+        "bot_username": bot_username or None,
     }
 
 
@@ -164,7 +197,11 @@ async def telegram_command(body: TelegramCommandRequest, db: Session = Depends(g
     session.last_scope = {"mode": response.mode}
     db.add(session)
     db.commit()
-    return {"text": response.text, "buttons": response.buttons}
+    return {
+        "text": response.text,
+        "buttons": response.buttons,
+        "task_links": _build_task_links(db, response.referenced_task_ids),
+    }
 
 
 @router.post("/confirm-action", response_model=TelegramCommandResponse, dependencies=[Depends(require_telegram_internal_token)])
@@ -214,4 +251,8 @@ async def confirm_action(body: TelegramConfirmActionRequest, db: Session = Depen
         session.last_task_ids = [str(task_id) for task_id in response.referenced_task_ids]
         db.add(session)
         db.commit()
-    return {"text": response.text, "buttons": response.buttons}
+    return {
+        "text": response.text,
+        "buttons": response.buttons,
+        "task_links": _build_task_links(db, response.referenced_task_ids),
+    }

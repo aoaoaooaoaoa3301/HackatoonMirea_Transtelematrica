@@ -10,14 +10,29 @@ client = BackendClient()
 
 
 async def _send_backend_response(message: Message, response: dict) -> None:
-    await message.answer(response.get("text", "Нет ответа."), reply_markup=inline_buttons(response.get("buttons") or []))
+    await message.answer(
+        response.get("text", "Нет ответа."),
+        reply_markup=inline_buttons(
+            response.get("buttons") or [],
+            response.get("task_links") or [],
+        ),
+    )
 
 
 @router.message(Command("start"))
-async def start(message: Message) -> None:
+async def start(message: Message, command: CommandObject) -> None:
+    # Deep-link auth: opening https://t.me/<bot>?start=<code> (or scanning its
+    # QR) launches the bot with the link code as the /start payload, so we link
+    # the account automatically — no manual /link CODE needed.
+    code = (command.args or "").strip()
+    if code:
+        response = await client.link(message.from_user, code)
+        await _send_backend_response(message, response)
+        return
     await message.answer(
         "Я Telegram-канал AI-помощника Транстелематики. "
-        "Если аккаунт ещё не подключен, получите код в веб-интерфейсе и отправьте /link CODE."
+        "Если аккаунт ещё не подключён, отсканируйте QR-код в веб-интерфейсе "
+        "(страница «Telegram») или получите код и отправьте /link CODE."
     )
 
 
