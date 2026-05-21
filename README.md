@@ -17,7 +17,8 @@
 | Дашборды | Recharts: распределение по статусам, отделам, выполнение по периодам, загрузка |
 | Канбан | Drag-and-drop через @dnd-kit |
 | Roadmap | Древовидный + Gantt-like вид только GOAL/EPIC для CEO |
-| AI-помощник | 7 функций (см. ниже), локально через Ollama |
+| AI-помощник | 7 функций (см. ниже), LLM provider abstraction, rule-based fallback |
+| Telegram-бот | Optional adapter через backend API, без прямого доступа к БД |
 | RBAC | 3 роли (EMPLOYEE / LEAD / ADMIN) + scoping по отделу |
 
 ### AI-функции
@@ -30,7 +31,16 @@
 6. **Чат с контекстом задач** — `/api/ai/chat`
 7. **Сводка по стратегической цели** — `/api/ai/goal-summary`
 
-Все AI-функции имеют **rule-based fallback** — система работает даже без LLM.
+Все AI-функции имеют **rule-based fallback** — система работает даже без LLM. LLM не имеет прямого доступа к БД и не генерирует SQL: backend сам собирает разрешенный контекст задач с учетом RBAC.
+
+### Архитектура AI-помощника
+
+- **Backend tools**: операции чтения/изменения задач выполняются только backend-сервисами.
+- **LLM provider abstraction**: `ollama`, `openai_compatible`, `docker_model`, `none`.
+- **Rule-based fallback**: если модель недоступна или вернула невалидный JSON, ответ строится локальными правилами.
+- **Telegram adapter**: отдельный bot service вызывает только HTTP API backend и передает `X-Telegram-Internal-Token`.
+- **Безопасная память**: `telegram_sessions` хранит последние показанные задачи и pending action для подтверждений.
+- **RBAC scope**: выборки задач проходят через общий `apply_task_scope`.
 
 ---
 
@@ -54,7 +64,7 @@
                                 ▼                ▼
                        ┌──────────────┐  ┌─────────────────┐
                        │ PostgreSQL   │  │ Ollama          │
-                       │ 16           │  │ qwen2.5:7b      │
+                       │ 16           │  │ gemma4:e4b      │
                        └──────────────┘  └─────────────────┘
 ```
 
@@ -100,12 +110,47 @@ AI-функции работают на rule-based фоллбэках и воз�
 docker compose --profile ai up -d
 ```
 
-Дополнительно поднимется Ollama и `ollama-bootstrap` скачает `qwen2.5:7b` (~4.7 ГБ, 5-15 минут на средне-быстром интернете). После этого AI-эндпоинты пойдут через локальную LLM.
+Дополнительно поднимется Ollama и `ollama-bootstrap` проверит/скачает `gemma4:e4b`. После этого AI-эндпоинты пойдут через локальную LLM.
 
 Сменить модель:
 ```bash
-OLLAMA_MODEL=qwen2.5:3b docker compose --profile ai up -d  # 1.9 ГБ, быстрее
+OLLAMA_MODEL=gemma4:e4b docker compose --profile ai up -d
 ```
+
+### 4. Опционально — OpenRouter/OpenAI-compatible API
+
+```env
+LLM_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_COMPATIBLE_API_KEY=...
+OPENAI_COMPATIBLE_MODEL=qwen/qwen-2.5-7b-instruct
+```
+
+```bash
+docker compose up -d --build
+```
+
+Для vLLM можно использовать тот же режим, если vLLM поднят как OpenAI-compatible server.
+
+### 5. Опционально — Telegram-бот
+
+```env
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_INTERNAL_TOKEN=replace-with-random-token
+```
+
+```bash
+docker compose --profile telegram up -d --build bot
+```
+
+Как подключить Telegram:
+
+1. Войти в веб-интерфейс.
+2. Открыть страницу `Telegram`.
+3. Нажать «Получить код подключения».
+4. Отправить боту `/link CODE`.
+
+После привязки бот понимает команды `/my`, `/week`, `/deadlines`, `/risks`, `/team`, `/overload` и свободный текст вроде «Что у меня горит на этой неделе?». Опасные действия, например комментарий или завершение задачи, требуют подтверждения inline-кнопкой.
 
 ### Демо-аккаунты
 
@@ -166,6 +211,14 @@ JWT_SECRET=$(openssl rand -hex 32)
 ---
 
 ## Troubleshooting
+
+### Проверяемые сценарии AI/Telegram/RBAC
+
+1. **RBAC**: зайти под `dmitry@ttm.local`, открыть список задач и убедиться, что нет задач вне доступного отдела/исполнителя. Под `admin@ttm.local` видны все задачи.
+2. **LLM fallback**: выставить `LLM_PROVIDER=none`, перезапустить backend и спросить в AI-чате про риски или загрузку. Ответ должен строиться rule-based логикой.
+3. **OpenAI-compatible**: выставить `LLM_PROVIDER=openai_compatible` и `OPENAI_COMPATIBLE_API_KEY`, запустить backend без профиля `ai`. Backend не должен зависеть от Ollama.
+4. **Telegram linking**: на странице `Telegram` получить код, отправить боту `/link CODE`, повторная отправка того же кода должна вернуть ошибку.
+5. **Telegram assistant**: отправить `/deadlines`, затем «Добавь ко второй комментарий: жду согласование от отдела». Бот должен попросить подтверждение и после нажатия «Да» добавить комментарий.
 
 ### `Bind for 0.0.0.0:XXXX failed: port is already allocated`
 У тебя что-то слушает порт 80/8080/5433. Проверь чем:
@@ -243,9 +296,10 @@ npm run dev  # http://localhost:5173, проксирует /api на :8000
 |---|---|
 | Развёртывание | Полностью on-premise через `docker compose up`. Любой Linux-сервер с Docker. |
 | Хранение данных | Только в локальной PostgreSQL. Никакой передачи во внешние сервисы. |
-| AI | Локальная модель через **Ollama** (qwen2.5:7b или любая другая). Работает offline. |
+| AI | Локальная модель через **Ollama/Docker Model Runner** или optional OpenAI-compatible provider. |
+| Telegram | Optional adapter. Бот не подключается к PostgreSQL и работает только через backend API. |
 | Зависимости | **Только open-source**: PostgreSQL, FastAPI, React, Ollama, Nginx. |
-| Платные SaaS | **Ноль обязательных**. Опционально можно подключить YandexGPT/GigaChat через тот же интерфейс `LLMProvider`. |
+| Платные SaaS | **Ноль обязательных**. Опционально можно подключить OpenRouter/OpenAI-compatible API через `LLMProvider`. |
 | Доступ | JWT + RBAC, 3 роли с разграничением по отделам. |
 | Аудит | Все изменения задач пишутся в `task_history` (immutable trail). |
 
@@ -256,6 +310,8 @@ npm run dev  # http://localhost:5173, проксирует /api на :8000
 3. Сгенерировать рабочие секреты — `JWT_SECRET` минимум 32 символа.
 4. Опционально: настроить TLS через Let's Encrypt / корпоративный CA.
 5. Опционально: бэкап volume `db_data` (стандартный pg_dump).
+
+При `LLM_PROVIDER=ollama` или `docker_model` корпоративные данные не уходят внешнему LLM-провайдеру. При `LLM_PROVIDER=openai_compatible` backend отправляет только подготовленный контекст задачи/сводки, а не прямой доступ к БД.
 
 ### Что можно дополнительно усилить под продакшн
 
@@ -293,6 +349,7 @@ npm run dev  # http://localhost:5173, проксирует /api на :8000
 │   ├── Dockerfile
 │   ├── nginx.conf
 │   └── package.json
+├── bot/                      Telegram bot adapter (aiogram, HTTP-only backend access)
 ├── docker-compose.yml        Полная сборка одной командой
 ├── README.md                 Этот файл
 └── .gitignore

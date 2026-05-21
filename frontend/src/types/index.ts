@@ -185,6 +185,7 @@ export interface AIAssigneeCandidate {
 export interface AIChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  buttons?: Array<{ label: string; callback_data: string }>;
 }
 
 export interface AIGoalSummary {

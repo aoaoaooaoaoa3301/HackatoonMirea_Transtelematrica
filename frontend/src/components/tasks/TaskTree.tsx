@@ -38,6 +38,7 @@ function TaskTreeNode({ task, level }: TaskTreeNodeProps) {
   const hasChildren = task.children && task.children.length > 0;
   const TypeIcon = typeIcons[task.type];
   const statusColor = STATUS_COLORS[task.status];
+  const departmentName = task.assigned_department_name ?? task.department?.name ?? null;
 
   return (
     <div>
@@ -82,9 +83,9 @@ function TaskTreeNode({ task, level }: TaskTreeNodeProps) {
           </div>
         </div>
 
-        {task.department?.name && (
+        {departmentName && (
           <Badge variant="outline" className="text-[10px] hidden md:inline-flex">
-            {task.department.name}
+            {departmentName}
           </Badge>
         )}
 

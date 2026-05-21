@@ -38,7 +38,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `JWT_ALGORITHM` | `HS256` | JWT algorithm |
 | `JWT_EXPIRE_MINUTES` | `1440` | Token expiry (24h) |
 | `OLLAMA_URL` | `http://ollama:11434` | Ollama API base URL |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | LLM model name |
+| `OLLAMA_MODEL` | `gemma4:e4b` | LLM model name |
 | `OLLAMA_TIMEOUT` | `30` | Ollama request timeout (seconds) |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Allowed CORS origins (comma-separated) |
 

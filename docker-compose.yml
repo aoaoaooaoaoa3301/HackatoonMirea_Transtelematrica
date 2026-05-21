@@ -41,7 +41,7 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-ai/gemma4:E4B}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -60,8 +60,17 @@ services:
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 1440
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-ai/gemma4:E4B}
+      LLM_PROVIDER: ${LLM_PROVIDER:-docker_model}
+      DOCKER_MODEL_URL: ${DOCKER_MODEL_URL:-http://model-runner.docker.internal}
       OLLAMA_TIMEOUT: 30
+      OPENAI_COMPATIBLE_BASE_URL: ${OPENAI_COMPATIBLE_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}
+      OPENAI_COMPATIBLE_MODEL: ${OPENAI_COMPATIBLE_MODEL:-qwen/qwen-2.5-7b-instruct}
+      OPENAI_COMPATIBLE_TIMEOUT: ${OPENAI_COMPATIBLE_TIMEOUT:-60}
+      OPENAI_COMPATIBLE_REFERER: ${OPENAI_COMPATIBLE_REFERER:-http://localhost}
+      OPENAI_COMPATIBLE_APP_TITLE: ${OPENAI_COMPATIBLE_APP_TITLE:-TTM Task Assistant}
+      TELEGRAM_INTERNAL_TOKEN: ${TELEGRAM_INTERNAL_TOKEN:-change-me}
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://localhost
     depends_on:
       db:
@@ -82,6 +91,19 @@ services:
       - backend
     ports:
       - "${TTM_WEB_PORT:-80}:80"
+
+  bot:
+    build: ./bot
+    container_name: ttm-telegram-bot
+    restart: unless-stopped
+    profiles: ["telegram"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BACKEND_URL: http://backend:8000
+      TELEGRAM_INTERNAL_TOKEN: ${TELEGRAM_INTERNAL_TOKEN:-change-me}
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   db_data:

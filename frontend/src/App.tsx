@@ -16,6 +16,7 @@ const RoadmapPage = lazy(() => import('@/pages/RoadmapPage'));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
 const TeamPage = lazy(() => import('@/pages/TeamPage'));
 const AIPage = lazy(() => import('@/pages/AIPage'));
+const TelegramPage = lazy(() => import('@/pages/TelegramPage'));
 
 function PageLoader() {
   return (
@@ -49,6 +50,7 @@ function App() {
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/team" element={<TeamPage />} />
                 <Route path="/ai" element={<AIPage />} />
+                <Route path="/telegram" element={<TelegramPage />} />
               </Route>
             </Routes>
           </Suspense>
