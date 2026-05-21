@@ -10,11 +10,14 @@ import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { TaskStrategyView } from '@/components/tasks/TaskStrategyView';
 import { TaskGraphView } from '@/components/tasks/TaskGraphView';
 import { getTasks } from '@/api/tasks';
+import { useAuthStore } from '@/store/authStore';
+import { canCreateTask } from '@/lib/permissions';
 import type { TaskFilters as TFilters } from '@/types';
 
 type ViewTab = 'strategy' | 'graph' | 'list';
 
 export default function TasksPage() {
+  const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<ViewTab>('strategy');
   const [filters, setFilters] = useState<TFilters>({});
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -54,10 +57,12 @@ export default function TasksPage() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Создать
-        </Button>
+        {canCreateTask(user) && (
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Создать
+          </Button>
+        )}
       </div>
 
       {/* Strategy view: grouped by GOAL with delegation flow */}
@@ -130,12 +135,14 @@ export default function TasksPage() {
               <Inbox className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
               <h3 className="text-lg font-medium mb-1">Задач не найдено</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Попробуйте изменить фильтры или создайте новую задачу
+                Попробуйте изменить фильтры{canCreateTask(user) ? ' или создайте новую задачу' : ''}
               </p>
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-1 h-4 w-4" />
-                Создать задачу
-              </Button>
+              {canCreateTask(user) && (
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Создать задачу
+                </Button>
+              )}
             </div>
           )}
 

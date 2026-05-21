@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { STATUS_LABELS } from '@/lib/statusUtils';
 import { getTask, addComment } from '@/api/tasks';
+import { parseServerDate } from '@/lib/dateUtils';
 import { useAuthStore } from '@/store/authStore';
 import type { Task, TaskType, Status } from '@/types';
 
@@ -654,7 +655,7 @@ function TaskOverviewPanel({
                   c.author?.full_name ??
                   (isMine ? currentUser?.full_name : null) ??
                   'Сотрудник';
-                const time = new Date(c.created_at).toLocaleString('ru-RU', {
+                const time = parseServerDate(c.created_at).toLocaleString('ru-RU', {
                   day: '2-digit',
                   month: 'short',
                   hour: '2-digit',

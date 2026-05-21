@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
@@ -13,6 +13,7 @@ import {
   Send,
   Loader2,
   Edit3,
+  Trash2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,7 +41,7 @@ import {
 } from '@/components/ui/select';
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
-import { getTask, updateTask, addComment } from '@/api/tasks';
+import { getTask, updateTask, addComment, deleteTask } from '@/api/tasks';
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -43,6 +52,8 @@ import {
   TASK_EVENT_LABELS,
 } from '@/lib/statusUtils';
 import { formatDate, formatDateTime, formatRelative } from '@/lib/dateUtils';
+import { canDeleteTask, canEditTaskMeta } from '@/lib/permissions';
+import { useAuthStore } from '@/store/authStore';
 import type { TaskType, Status, Priority } from '@/types';
 
 const typeIcons: Record<TaskType, React.ElementType> = {
@@ -54,7 +65,9 @@ const typeIcons: Record<TaskType, React.ElementType> = {
 
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [commentText, setCommentText] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -62,6 +75,7 @@ export default function TaskDetailPage() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [subDialogOpen, setSubDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', id],
@@ -82,6 +96,14 @@ export default function TaskDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       setCommentText('');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTask(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      navigate('/tasks');
     },
   });
 
@@ -110,6 +132,8 @@ export default function TaskDetailPage() {
 
   const TypeIcon = typeIcons[task.type];
   const statusColor = STATUS_COLORS[task.status];
+  const canEdit = canEditTaskMeta(currentUser, task);
+  const canDelete = canDeleteTask(currentUser, task);
   const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
   const departmentName = task.assigned_department_name ?? task.department?.name ?? null;
   const assigneeInitials = assigneeName
@@ -168,7 +192,7 @@ export default function TaskDetailPage() {
                 Отмена
               </Button>
             </div>
-          ) : (
+          ) : canEdit ? (
             <h1
               className="text-xl font-bold cursor-pointer hover:text-primary/80 transition-colors group flex items-center gap-2"
               onClick={() => {
@@ -179,8 +203,21 @@ export default function TaskDetailPage() {
               {task.title}
               <Edit3 className="h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
             </h1>
+          ) : (
+            <h1 className="text-xl font-bold">{task.title}</h1>
           )}
         </div>
+        {canDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 border-rose-500/30 shrink-0"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Удалить
+          </Button>
+        )}
       </div>
 
       {/* Main content */}
@@ -215,7 +252,7 @@ export default function TaskDetailPage() {
                     </Button>
                   </div>
                 </div>
-              ) : (
+              ) : canEdit ? (
                 <p
                   className="text-sm text-muted-foreground whitespace-pre-wrap cursor-pointer hover:bg-accent/30 rounded p-2 -m-2 transition-colors"
                   onClick={() => {
@@ -224,6 +261,10 @@ export default function TaskDetailPage() {
                   }}
                 >
                   {task.description || 'Нажмите, чтобы добавить описание...'}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {task.description || 'Без описания'}
                 </p>
               )}
             </CardContent>
@@ -497,6 +538,39 @@ export default function TaskDetailPage() {
         parentId={task.id}
         defaultType={task.type === 'GOAL' ? 'EPIC' : task.type === 'EPIC' ? 'TASK' : 'SUBTASK'}
       />
+
+      {/* Delete confirmation */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить задачу?</DialogTitle>
+            <DialogDescription>
+              «{task.title}» будет удалена безвозвратно
+              {(task.children?.length ?? 0) > 0 && (
+                <> вместе с {task.children!.length} подзадач(ами)</>
+              )}
+              . Это действие нельзя отменить.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1 h-4 w-4" />
+              )}
+              Удалить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuthStore } from '@/store/authStore';
+import { canCreateTask } from '@/lib/permissions';
 
 const pageTitles: Record<string, string> = {
   '/': 'Дашборд',
@@ -19,6 +21,7 @@ const pageTitles: Record<string, string> = {
 export function Topbar() {
   const location = useLocation();
   const { theme, toggle } = useTheme();
+  const user = useAuthStore((s) => s.user);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
   const title =
@@ -42,10 +45,12 @@ export function Topbar() {
           />
         </div>
 
-        <Button size="sm" onClick={() => setTaskDialogOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Создать
-        </Button>
+        {canCreateTask(user) && (
+          <Button size="sm" onClick={() => setTaskDialogOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Создать
+          </Button>
+        )}
 
         <Button variant="ghost" size="icon" onClick={toggle}>
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

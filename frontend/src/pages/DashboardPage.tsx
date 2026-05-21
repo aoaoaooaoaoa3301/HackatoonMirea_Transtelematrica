@@ -26,6 +26,8 @@ import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { getAnalyticsOverview, getWorkloadAnalytics } from '@/api/analytics';
 import { getRisks, getDigest } from '@/api/ai';
 import { getCapacityColor, getCapacityBgColor } from '@/lib/statusUtils';
+import { useAuthStore } from '@/store/authStore';
+import { canCreateTask } from '@/lib/permissions';
 
 /* ------------------------------------------------------------------ */
 /*  StatCard                                                           */
@@ -269,6 +271,11 @@ function AISidebarPanel() {
 
 function QuickActionsCard() {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const user = useAuthStore((s) => s.user);
+
+  // For employees there are no quick actions to offer — hide the card
+  // entirely rather than show a lone disabled button.
+  if (!canCreateTask(user)) return null;
 
   return (
     <>

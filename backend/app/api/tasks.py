@@ -56,7 +56,7 @@ def get_tree(
 
 @router.get("")
 def list_tasks(
-    type: Optional[TaskType] = None,
+    type_filter: Optional[str] = Query(None, alias="type"),
     department_id: Optional[uuid.UUID] = None,
     assignee_id: Optional[uuid.UUID] = None,
     created_by_id: Optional[uuid.UUID] = None,
@@ -73,8 +73,14 @@ def list_tasks(
 ):
     query = apply_task_scope(db.query(Task), current_user, db)
 
-    if type:
-        query = query.filter(Task.type == type)
+    # Type filter is a UNION (OR) over the selected types — selecting
+    # "Цель" + "Эпик" returns tasks that are GOAL *or* EPIC, matching how
+    # status/priority already behave. (Previously a single-value param,
+    # which made multi-select either break or behave like an intersection.)
+    if type_filter:
+        types = [t.strip() for t in type_filter.split(",") if t.strip()]
+        if types:
+            query = query.filter(Task.type.in_(types))
     if department_id:
         query = query.filter(Task.assigned_department_id == department_id)
     if assignee_id:
