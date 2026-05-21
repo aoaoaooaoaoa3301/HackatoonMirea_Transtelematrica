@@ -98,7 +98,8 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
         getPriorityBorderClass(task.priority)
       )}>
         <CardContent className="flex flex-col p-4 h-full justify-between">
-          {/* Top row: status badge left, period badge right */}
+          <div>{/* Top row: status badge left, period badge right */}
+
           <div className="flex items-center justify-between mb-3">
             <Badge className={cn(
               'border-0 text-[10px] px-2 py-0.5 rounded-md font-medium',
@@ -113,12 +114,15 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
               </Badge>
             )}
           </div>
-          <div>
+          
             {/* Title */}
-            <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-3">
+          <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-3">
               {task.title}
-            </h3>
+          </h3>
+          </div>
+          
 
+          <div>
             {/* Progress (for non-subtasks) */}
             {task.type !== 'SUBTASK' && task.progress > 0 && (
               <div className="mb-3">
