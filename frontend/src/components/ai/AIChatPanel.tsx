@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
-import { Send, Loader2, Sparkles, Bot, User } from 'lucide-react';
+import { Send, Loader2, Sparkles, Bot, User, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
   cancelAssistantAction,
+  clearAssistantConversation,
   confirmAssistantAction,
   getAssistantConversation,
   sendAssistantMessage,
@@ -100,12 +101,35 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
     },
   });
 
+  const clearMutation = useMutation({
+    mutationFn: () => clearAssistantConversation(conversationId),
+    onSuccess: (data) => {
+      setConversationId(data.conversation_id);
+      localStorage.setItem(CONVERSATION_STORAGE_KEY, data.conversation_id);
+      setMessages([]);
+    },
+    onError: () => {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Не удалось очистить историю чата. Попробуйте ещё раз.' },
+      ]);
+    },
+  });
+
   const handleSend = (text?: string) => {
     const msg = text ?? input.trim();
     if (!msg) return;
     setMessages((prev) => [...prev, { role: 'user', content: msg }]);
     setInput('');
     chatMutation.mutate(msg);
+  };
+
+  const handleClearHistory = () => {
+    if (clearMutation.isPending) return;
+    if (!window.confirm('Очистить историю чата с AI-помощником? Черновики и ожидающие подтверждения действия тоже будут сброшены.')) {
+      return;
+    }
+    clearMutation.mutate();
   };
 
   useEffect(() => {
@@ -230,7 +254,7 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
       {/* Quick actions (if messages exist) */}
       {messages.length > 0 && (
         <div className="px-4 pb-2">
-          <div className="max-w-3xl mx-auto flex flex-wrap gap-1.5">
+          <div className="max-w-3xl mx-auto flex flex-wrap items-center gap-1.5">
             {quickActions.map((action) => (
               <Badge
                 key={action.label}
@@ -241,6 +265,17 @@ export function AIChatPanel({ contextScope = 'all', contextDeptId }: AIChatPanel
                 {action.label}
               </Badge>
             ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-destructive"
+              disabled={clearMutation.isPending || chatMutation.isPending || actionMutation.isPending}
+              onClick={handleClearHistory}
+            >
+              {clearMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Очистить
+            </Button>
           </div>
         </div>
       )}

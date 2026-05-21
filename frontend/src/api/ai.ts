@@ -112,6 +112,13 @@ export async function sendAssistantMessage(params: {
   return res.data;
 }
 
+export async function clearAssistantConversation(conversationId?: string): Promise<AssistantConversationResponse> {
+  const res = await apiClient.delete<AssistantConversationResponse>('/ai/assistant/conversation', {
+    params: conversationId ? { conversation_id: conversationId } : undefined,
+  });
+  return res.data;
+}
+
 export async function confirmAssistantAction(actionId: string): Promise<{ text: string; buttons: AssistantButton[] }> {
   const res = await apiClient.post<{ text: string; buttons: AssistantButton[] }>(
     `/ai/assistant/actions/${actionId}/confirm`

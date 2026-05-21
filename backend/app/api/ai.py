@@ -118,6 +118,25 @@ async def assistant_message(
     }
 
 
+@router.delete("/assistant/conversation", response_model=AssistantConversationResponse)
+async def assistant_clear_conversation(
+    conversation_id: Optional[uuid.UUID] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conversation = assistant_agent.clear_conversation(db, current_user, conversation_id, channel="web", external_chat_id="default")
+    return {
+        "conversation_id": conversation.id,
+        "messages": [],
+        "mode": "degraded" if conversation.llm_status == "down" else "normal",
+        "model": {
+            "provider": assistant_agent.settings.LLM_PROVIDER,
+            "name": assistant_agent._model_name(),
+            "available": conversation.llm_status == "up",
+        },
+    }
+
+
 @router.post("/assistant/actions/{action_id}/confirm", response_model=AssistantConfirmResponse)
 async def assistant_confirm_action(
     action_id: uuid.UUID,

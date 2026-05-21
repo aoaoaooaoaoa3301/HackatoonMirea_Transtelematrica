@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import apply_task_scope, user_can_access_task
+from app.core.deps import _get_subdepartment_ids, apply_task_scope, user_can_access_task
 from app.models.assistant import AssistantConversation, AssistantMessage, AssistantPendingAction
 from app.models.department import Department
 from app.models.enums import TaskPriority, TaskStatus, TaskType
@@ -41,6 +41,7 @@ WRITE_ACTIONS = {
     "update_task_assignment",
     "update_task_progress",
     "complete_task",
+    "delete_task",
     "add_task_comment",
 }
 
@@ -163,6 +164,7 @@ Write actions:
 - update_task_assignment: {"task_id": "uuid|null", "task_ref": "optional", "assignee_id": "uuid|null", "department_id": "uuid|null", "assignment_empty": false}
 - update_task_progress: {"task_id": "uuid|null", "task_ref": "optional", "progress": 0-100, "comment": "optional"}
 - complete_task: {"task_id": "uuid|null", "task_ref": "optional", "comment": "optional"}
+- delete_task: {"task_id": "uuid|null", "task_ref": "optional", "comment": "optional"}. Доступно только администратору для любых задач и руководителю для задач своего отдела. Сотрудник не может удалять задачи.
 - add_task_comment: {"task_id": "uuid|null", "task_ref": "optional", "comment": "..."}
 
 Отвечай строго JSON:
@@ -396,6 +398,15 @@ def _resolve_task(db: Session, user: User, conversation: AssistantConversation, 
     return legacy_tools.resolve_task_ref(db, user, str(ref), _SessionRef(_memory_task_ids(conversation))) if ref else None
 
 
+def _can_delete_task(db: Session, user: User, task: Task) -> bool:
+    if user.role.value == "ADMIN":
+        return True
+    if user.role.value != "LEAD" or not user.department_id or not task.assigned_department_id:
+        return False
+    department_ids = _get_subdepartment_ids(db, user.department_id)
+    return task.assigned_department_id in department_ids
+
+
 def _conversation_context(db: Session, user: User, conversation: AssistantConversation, message: str, tool_results: list[dict]) -> dict[str, Any]:
     memory = conversation.working_memory or {}
     tasks = _scoped_tasks(db, user)
@@ -591,7 +602,7 @@ def _missing_action_fields(action_type: str, payload: dict[str, Any]) -> list[st
             missing.append("задача")
         if payload.get("progress") is None:
             missing.append("прогресс")
-    elif action_type in {"complete_task", "update_task_assignment"}:
+    elif action_type in {"complete_task", "update_task_assignment", "delete_task"}:
         if not payload.get("task_id"):
             missing.append("задача")
     if action_type == "update_task_assignment" and not payload.get("assignment_empty") and not payload.get("assignee_id") and not payload.get("department_id"):
@@ -630,7 +641,7 @@ def _validated_action_payload(
                 payload["parent_id"] = str(parent.id)
                 payload["parent_title"] = parent.title
 
-    if action_type in {"add_task_comment", "update_task_progress", "complete_task", "update_task_assignment"}:
+    if action_type in {"add_task_comment", "update_task_progress", "complete_task", "update_task_assignment", "delete_task"}:
         task = _resolve_task(db, user, conversation, task_id=payload.get("task_id"), task_ref=payload.get("task_ref"))
         if task:
             payload["task_id"] = str(task.id)
@@ -688,6 +699,8 @@ def _format_action_confirmation(action_type: str, payload: dict[str, Any]) -> st
         return f"Изменить прогресс задачи «{payload.get('task_title')}» на {payload.get('progress')}%?"
     if action_type == "complete_task":
         return f"Завершить задачу «{payload.get('task_title')}»?"
+    if action_type == "delete_task":
+        return f"Удалить задачу «{payload.get('task_title')}»? Это действие нельзя отменить."
     if action_type == "update_task_assignment":
         target = (
             payload.get("assignee_name")
@@ -842,6 +855,14 @@ async def process_message(
             assistant_message = _store_message(db, conversation, "assistant", text, {"mode": "clarification", "missing": missing})
             db.commit()
             return AgentResult(conversation.id, text, [], None, [], "normal", _model_state(True), assistant_message.id)
+        if action_type == "delete_task":
+            task = db.get(Task, UUID(str(payload["task_id"]))) if payload.get("task_id") else None
+            if not task or not _can_delete_task(db, user, task):
+                text = recovered_prefix + "У вас нет прав на удаление этой задачи. Администратор может удалять любые задачи, руководитель — только задачи своего отдела, сотрудник не может удалять задачи."
+                text = _localize_enum_codes(text)
+                assistant_message = _store_message(db, conversation, "assistant", text, {"mode": "permission_denied"})
+                db.commit()
+                return AgentResult(conversation.id, text, [], None, [], "normal", _model_state(True), assistant_message.id)
         pending = _create_pending_action(db, conversation, action_type, payload)
         memory = dict(conversation.working_memory or {})
         memory.pop("active_draft", None)
@@ -959,6 +980,22 @@ def _execute_action(db: Session, user: User, action: AssistantPendingAction) -> 
         recompute_parent_progress(db, task)
         text = f"Задача «{task.title}» завершена."
         task_ids = [task.id]
+    elif action_type == "delete_task":
+        task = db.get(Task, UUID(str(payload["task_id"])))
+        if not task or not user_can_access_task(db, user, task) or not _can_delete_task(db, user, task):
+            raise PermissionError("No access to delete task")
+        task_title = task.title
+        task_id = task.id
+        parent = task.parent
+        db.delete(task)
+        db.flush()
+        if parent:
+            children = db.query(Task).filter(Task.parent_id == parent.id).all()
+            parent.progress = int(sum(child.progress for child in children) / len(children)) if children else 0
+            db.add(parent)
+            recompute_parent_progress(db, parent)
+        text = f"Задача «{task_title}» удалена."
+        task_ids = []
     elif action_type == "update_task_assignment":
         task = db.get(Task, UUID(str(payload["task_id"])))
         if not task or not user_can_access_task(db, user, task):
@@ -1034,6 +1071,24 @@ def latest_pending_action(db: Session, conversation: AssistantConversation) -> O
         .order_by(AssistantPendingAction.created_at.desc())
         .first()
     )
+
+
+def clear_conversation(
+    db: Session,
+    user: User,
+    conversation_id: Optional[UUID] = None,
+    channel: str = "web",
+    external_chat_id: Optional[str] = "default",
+) -> AssistantConversation:
+    conversation = _get_or_create_conversation(db, user, channel, conversation_id, external_chat_id)
+    db.query(AssistantPendingAction).filter(AssistantPendingAction.conversation_id == conversation.id).delete(synchronize_session=False)
+    db.query(AssistantMessage).filter(AssistantMessage.conversation_id == conversation.id).delete(synchronize_session=False)
+    conversation.working_memory = {}
+    conversation.llm_recovered_notice_pending = False
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    return conversation
 
 
 def get_conversation_messages(db: Session, user: User, conversation_id: Optional[UUID] = None, channel: str = "web") -> tuple[AssistantConversation, list[AssistantMessage]]:

@@ -48,6 +48,13 @@ def _get_or_create_session(db: Session, telegram_user_id: int, user_id) -> Teleg
     return session
 
 
+def _is_clear_history_command(message: str) -> bool:
+    text = (message or "").strip().lower()
+    return text in {"/clear", "/reset", "clear", "reset"} or (
+        any(word in text for word in ("очист", "удали", "сброс")) and "истори" in text
+    )
+
+
 @router.get("/status", response_model=TelegramStatusResponse)
 def telegram_status(
     db: Session = Depends(get_db),
@@ -128,6 +135,22 @@ async def telegram_command(body: TelegramCommandRequest, db: Session = Depends(g
         return {"text": "Связанный пользователь не найден или отключён.", "buttons": []}
 
     session = _get_or_create_session(db, body.telegram_user_id, user.id)
+    if _is_clear_history_command(body.message):
+        assistant_agent.clear_conversation(
+            db,
+            user,
+            channel="telegram",
+            external_chat_id=str(body.telegram_user_id),
+        )
+        session.last_task_ids = []
+        session.pending_action = None
+        session.chat_history = []
+        session.last_intent = None
+        session.last_scope = {}
+        db.add(session)
+        db.commit()
+        return {"text": "История чата с AI-помощником очищена.", "buttons": []}
+
     response = await assistant_agent.process_message(
         db,
         user,
