@@ -71,6 +71,7 @@ def run_seed():
             ("lead.fin", "lead.fin@ttm.local", "Татьяна Зайцева", UserRole.LEAD, "Финансы", ["отчётность", "бюджет", "ФСБУ"], "senior"),
             ("lead.hr", "lead.hr@ttm.local", "Мария Соколова", UserRole.LEAD, "HR", ["найм", "адаптация", "ИТ-рекрутинг"], "senior"),
             ("lead.mkt", "lead.mkt@ttm.local", "Екатерина Белова", UserRole.LEAD, "Маркетинг", ["b2b-маркетинг", "выставки", "контент"], "middle"),
+            ("lead.legal", "lead.legal@ttm.local", "Наталья Морозова", UserRole.LEAD, "Юридический отдел", ["договорное право", "287-ФЗ", "комплаенс", "тендеры"], "senior"),
 
             # Engineers / employees
             ("dev.alex", "alex@ttm.local", "Алексей Новиков", UserRole.EMPLOYEE, "Технический отдел", ["python", "fastapi", "postgresql"], "middle"),
@@ -83,6 +84,8 @@ def run_seed():
             ("fin.olga", "olga.fin@ttm.local", "Ольга Кузьмина", UserRole.EMPLOYEE, "Финансы", ["1С", "отчётность"], "middle"),
             ("sales.kirill", "kirill@ttm.local", "Кирилл Денисов", UserRole.EMPLOYEE, "Отдел продаж", ["B2B", "тендеры"], "middle"),
             ("prod.igor", "igor@ttm.local", "Игорь Семёнов", UserRole.EMPLOYEE, "Производство", ["сборка", "пайка", "qa"], "middle"),
+            ("legal.sergey", "sergey.legal@ttm.local", "Сергей Волков", UserRole.EMPLOYEE, "Юридический отдел", ["договоры", "лицензирование"], "middle"),
+            ("legal.maria", "maria.legal@ttm.local", "Мария Зотова", UserRole.EMPLOYEE, "Юридический отдел", ["комплаенс", "287-ФЗ"], "junior"),
         ]
 
         user_ids = {}
@@ -114,6 +117,7 @@ def run_seed():
             "Финансы": "lead.fin",
             "HR": "lead.hr",
             "Маркетинг": "lead.mkt",
+            "Юридический отдел": "lead.legal",
         }
         for dept_name, user_key in head_map.items():
             dept = db.get(Department, depts[dept_name])
@@ -505,7 +509,7 @@ def run_seed():
         # ============================================================
         t38 = mk_task("38",
             type=TaskType.TASK, title="Согласовать NDA с подрядчиками по тендеру Минтранса",
-            assignee_id=user_ids["admin"],
+            assignee_id=user_ids["lead.legal"],
             assigned_department_id=depts["Юридический отдел"],
             due_date=date(2026, 5, 22),
             priority=TaskPriority.HIGH, status=TaskStatus.IN_PROGRESS, progress=50,
@@ -513,6 +517,7 @@ def run_seed():
         )
         t39 = mk_task("39",
             type=TaskType.TASK, title="Подготовить договор поставки для Казанского перевозчика",
+            assignee_id=user_ids["legal.sergey"],
             assigned_department_id=depts["Юридический отдел"],
             due_date=date(2026, 5, 29),
             priority=TaskPriority.HIGH, status=TaskStatus.NEW, progress=0,
