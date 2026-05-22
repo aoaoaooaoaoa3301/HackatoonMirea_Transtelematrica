@@ -52,22 +52,6 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
         <div className="flex-1" />
 
-        <div className="relative hidden md:block">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Поиск... (Cmd+K)"
-            className="w-64 pl-8"
-            onFocus={(e) => e.target.blur()}
-          />
-        </div>
-
-        {canCreateTask(user) && (
-          <Button size="sm" onClick={() => setTaskDialogOpen(true)}>
-            <Plus className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Создать</span>
-          </Button>
-        )}
 
         <Button variant="ghost" size="icon" onClick={toggle}>
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
