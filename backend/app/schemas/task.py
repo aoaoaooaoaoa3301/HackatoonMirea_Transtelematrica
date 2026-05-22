@@ -38,6 +38,10 @@ class CommentCreate(BaseModel):
     body: str
 
 
+class CommentUpdate(BaseModel):
+    body: str
+
+
 class CommentOut(BaseModel):
     id: UUID
     task_id: UUID

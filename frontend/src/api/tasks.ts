@@ -49,6 +49,15 @@ export async function addComment(taskId: string, body: string): Promise<TaskComm
   return res.data;
 }
 
+export async function updateComment(taskId: string, commentId: string, body: string): Promise<TaskComment> {
+  const res = await apiClient.patch<TaskComment>(`/tasks/${taskId}/comments/${commentId}`, { body });
+  return res.data;
+}
+
+export async function deleteComment(taskId: string, commentId: string): Promise<void> {
+  await apiClient.delete(`/tasks/${taskId}/comments/${commentId}`);
+}
+
 export async function getTaskTree(rootId?: string): Promise<Task[]> {
   const params: Record<string, string> = {};
   if (rootId) params.root_id = rootId;

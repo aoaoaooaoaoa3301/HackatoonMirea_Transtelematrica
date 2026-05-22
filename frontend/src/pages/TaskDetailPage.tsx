@@ -49,7 +49,7 @@ import {
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { TaskEditDialog } from '@/components/tasks/TaskEditDialog';
-import { getTask, updateTask, addComment, deleteTask } from '@/api/tasks';
+import { getTask, updateTask, addComment, updateComment, deleteComment, deleteTask } from '@/api/tasks';
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -77,6 +77,8 @@ export default function TaskDetailPage() {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const [commentText, setCommentText] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentBody, setEditCommentBody] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -106,6 +108,20 @@ export default function TaskDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       setCommentText('');
     },
+  });
+
+  const editCommentMutation = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+      updateComment(id!, commentId, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', id] });
+      setEditingCommentId(null);
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) => deleteComment(id!, commentId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', id] }),
   });
 
   const deleteMutation = useMutation({
@@ -352,21 +368,75 @@ export default function TaskDetailPage() {
                     .join('')
                     .slice(0, 2)
                     .toUpperCase();
+                  const isAuthor = comment.author_id === currentUser?.id;
+                  const canDeleteComment = isAuthor || currentUser?.role === 'ADMIN';
+                  const editing = editingCommentId === comment.id;
                   return (
-                    <div key={comment.id} className="flex gap-3">
+                    <div key={comment.id} className="flex gap-3 group">
                       <Avatar className="h-8 w-8 shrink-0">
                         <AvatarFallback className="text-xs bg-primary/10">
                           {initials}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-medium">{authorName}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatRelative(comment.created_at)}
                           </span>
+                          {canDeleteComment && !editing && (
+                            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {isAuthor && (
+                                <button
+                                  className="text-muted-foreground hover:text-foreground p-1"
+                                  onClick={() => {
+                                    setEditingCommentId(comment.id);
+                                    setEditCommentBody(comment.body);
+                                  }}
+                                  aria-label="Редактировать"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                className="text-muted-foreground hover:text-rose-500 p-1"
+                                onClick={() => deleteCommentMutation.mutate(comment.id)}
+                                aria-label="Удалить"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-sm text-muted-foreground">{comment.body}</p>
+                        {editing ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={editCommentBody}
+                              onChange={(e) => setEditCommentBody(e.target.value)}
+                              rows={2}
+                              className="text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  editCommentBody.trim() &&
+                                  editCommentMutation.mutate({ commentId: comment.id, body: editCommentBody.trim() })
+                                }
+                                disabled={!editCommentBody.trim() || editCommentMutation.isPending}
+                              >
+                                Сохранить
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>
+                                Отмена
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                            {comment.body}
+                          </p>
+                        )}
                       </div>
                     </div>
                   );

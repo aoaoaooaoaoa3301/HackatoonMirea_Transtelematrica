@@ -13,7 +13,7 @@ from app.core.deps import (
 from app.models.task import Task, TaskComment
 from app.models.user import User
 from app.models.enums import TaskType, TaskPriority, TaskStatus, UserRole
-from app.schemas.task import TaskCreate, TaskUpdate, CommentCreate, TaskOut, TaskDetailOut
+from app.schemas.task import TaskCreate, TaskUpdate, CommentCreate, CommentUpdate, TaskOut, TaskDetailOut
 from app.services.task_service import (
     compute_period_bucket, infer_child_type, log_history,
     recompute_parent_progress, get_parent_chain, build_tree,
@@ -376,3 +376,49 @@ def add_comment(
         "body": comment.body,
         "created_at": comment.created_at,
     }
+
+
+@router.patch("/{task_id}/comments/{comment_id}")
+def update_comment(
+    task_id: uuid.UUID,
+    comment_id: uuid.UUID,
+    body: CommentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_task_access(task_id, db, current_user)
+    comment = db.get(TaskComment, comment_id)
+    if comment is None or comment.task_id != task_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Комментарий не найден")
+    # Only the author may edit their own comment.
+    if comment.author_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Можно редактировать только свои комментарии")
+    comment.body = body.body
+    db.commit()
+    db.refresh(comment)
+    return {
+        "id": comment.id,
+        "task_id": comment.task_id,
+        "author_id": comment.author_id,
+        "author_name": comment.author.full_name if comment.author else current_user.full_name,
+        "body": comment.body,
+        "created_at": comment.created_at,
+    }
+
+
+@router.delete("/{task_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_comment(
+    task_id: uuid.UUID,
+    comment_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_task_access(task_id, db, current_user)
+    comment = db.get(TaskComment, comment_id)
+    if comment is None or comment.task_id != task_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Комментарий не найден")
+    # The author may delete their own comment; ADMIN may delete any.
+    if comment.author_id != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав для удаления комментария")
+    db.delete(comment)
+    db.commit()
