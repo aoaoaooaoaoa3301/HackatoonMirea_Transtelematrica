@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from app.core.deps import get_db, get_current_user, require_task_access, apply_task_scope
+from app.core.deps import get_db, get_current_user, require_task_access, apply_task_scope, can_delete_task
 from app.models.task import Task, TaskComment
 from app.models.user import User
 from app.models.enums import TaskType, TaskPriority, TaskStatus, UserRole
@@ -56,7 +56,7 @@ def get_tree(
 
 @router.get("")
 def list_tasks(
-    type: Optional[TaskType] = None,
+    type_filter: Optional[str] = Query(None, alias="type"),
     department_id: Optional[uuid.UUID] = None,
     assignee_id: Optional[uuid.UUID] = None,
     created_by_id: Optional[uuid.UUID] = None,
@@ -73,8 +73,14 @@ def list_tasks(
 ):
     query = apply_task_scope(db.query(Task), current_user, db)
 
-    if type:
-        query = query.filter(Task.type == type)
+    # Type filter is a UNION (OR) over the selected types — selecting
+    # "Цель" + "Эпик" returns tasks that are GOAL *or* EPIC, matching how
+    # status/priority already behave. (Previously a single-value param,
+    # which made multi-select either break or behave like an intersection.)
+    if type_filter:
+        types = [t.strip() for t in type_filter.split(",") if t.strip()]
+        if types:
+            query = query.filter(Task.type.in_(types))
     if department_id:
         query = query.filter(Task.assigned_department_id == department_id)
     if assignee_id:
@@ -91,7 +97,11 @@ def list_tasks(
         if parent_id == "null":
             query = query.filter(Task.parent_id.is_(None))
         else:
-            query = query.filter(Task.parent_id == uuid.UUID(parent_id))
+            try:
+                parent_uuid = uuid.UUID(parent_id)
+            except ValueError:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parent_id")
+            query = query.filter(Task.parent_id == parent_uuid)
     if q:
         pattern = f"%{q}%"
         query = query.filter(or_(Task.title.ilike(pattern), Task.description.ilike(pattern)))
@@ -230,6 +240,8 @@ def update_task(
     old_status = task.status
     old_assignee = task.assignee_id
     old_progress = task.progress
+    old_due = task.due_date
+    old_dept = task.assigned_department_id
 
     for key, val in update_data.items():
         setattr(task, key, val)
@@ -259,6 +271,21 @@ def update_task(
             "new": task.progress,
         })
 
+    if "due_date" in update_data and update_data.get("due_date") != old_due:
+        log_history(db, task.id, "due_date_changed", current_user.id, {
+            "old": old_due.isoformat() if old_due else None,
+            "new": task.due_date.isoformat() if task.due_date else None,
+        })
+
+    if "assigned_department_id" in update_data and update_data.get("assigned_department_id") != old_dept:
+        from app.models.department import Department
+        new_dept = db.get(Department, task.assigned_department_id) if task.assigned_department_id else None
+        log_history(db, task.id, "department_changed", current_user.id, {
+            "old_department_id": str(old_dept) if old_dept else None,
+            "new_department_id": str(task.assigned_department_id) if task.assigned_department_id else None,
+            "new_department_name": new_dept.name if new_dept else None,
+        })
+
     db.commit()
     db.refresh(task)
 
@@ -276,8 +303,9 @@ def delete_task(
     current_user: User = Depends(get_current_user),
 ):
     task = require_task_access(task_id, db, current_user)
-    if current_user.role != UserRole.ADMIN and task.created_by_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    # ADMIN: any task · LEAD: tasks in their department subtree · EMPLOYEE: none.
+    if not can_delete_task(db, current_user, task):
+        raise HTTPException(status_code=403, detail="Недостаточно прав для удаления задачи")
     db.delete(task)
     db.commit()
 

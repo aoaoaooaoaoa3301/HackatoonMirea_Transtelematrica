@@ -1,6 +1,8 @@
+import asyncio
 import hashlib
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -20,6 +22,7 @@ from app.models.user import User
 from app.schemas.assistant import AssistantActionButton
 from app.services import assistant_tools as legacy_tools
 from app.services.llm import get_llm_provider
+from app.services.llm.base import NullLLMProvider
 from app.services.llm.json_utils import extract_json_object
 from app.services.task_service import infer_child_type, log_history, recompute_parent_progress
 
@@ -201,6 +204,49 @@ def _model_name() -> str:
 
 def _model_state(available: bool) -> dict[str, Any]:
     return {"provider": settings.LLM_PROVIDER, "name": _model_name(), "available": available}
+
+
+# Cached, real provider health. Replaces deriving "available" from a single
+# conversation's stored llm_status — which made a brand-new conversation report
+# the model as down, and made availability differ per user/conversation. The
+# result is cached so we don't ping the provider on every page load.
+_LLM_HEALTH: dict[str, Any] = {"ok": None, "ts": 0.0}
+
+
+async def check_llm_available(ttl: float = 30.0) -> bool:
+    """Whether the configured LLM provider currently answers. None provider →
+    not available. Otherwise a short, cached ping (so the conversation status
+    reflects reality rather than per-conversation state)."""
+    provider = get_llm_provider()
+    if isinstance(provider, NullLLMProvider):
+        return False
+    now = time.monotonic()
+    if _LLM_HEALTH["ok"] is not None and (now - _LLM_HEALTH["ts"]) < ttl:
+        return bool(_LLM_HEALTH["ok"])
+    try:
+        res = await asyncio.wait_for(
+            provider.generate("ping", system="Ответь одним словом: OK", temperature=0.0),
+            timeout=8.0,
+        )
+        ok = bool(res and str(res).strip())
+    except Exception:
+        ok = False
+    _LLM_HEALTH["ok"] = ok
+    _LLM_HEALTH["ts"] = now
+    return ok
+
+
+def _system_prompt() -> str:
+    """System prompt + the assistant's *real* model identity, so it stops
+    hallucinating things like "GPT-4" when asked what model it is."""
+    return (
+        AGENT_SYSTEM_PROMPT
+        + f"\n\nФАКТ О СЕБЕ: ты работаешь на модели «{_model_name()}» "
+        f"через провайдера «{settings.LLM_PROVIDER}». "
+        "Если спрашивают, какая ты модель или на чём построена — назови ИМЕННО это "
+        "значение модели. Никогда не выдумывай другое имя (например, GPT-4), "
+        "если оно не совпадает с указанным выше."
+    )
 
 
 def _json_default(value: Any) -> str:
@@ -457,7 +503,7 @@ def _set_last_tasks(conversation: AssistantConversation, tasks: list[Task]) -> N
 
 async def _ask_agent(prompt: str) -> tuple[Optional[dict[str, Any]], bool]:
     try:
-        raw = await get_llm_provider().generate(prompt, system=AGENT_SYSTEM_PROMPT, json_mode=True, temperature=0.1)
+        raw = await get_llm_provider().generate(prompt, system=_system_prompt(), json_mode=True, temperature=0.1)
     except Exception:
         return None, False
     if not raw:
@@ -1022,12 +1068,32 @@ async def confirm_action(
     action_id: UUID,
     confirm: bool,
 ) -> AgentResult:
-    action = db.get(AssistantPendingAction, action_id)
+    # Lock the pending-action row so two concurrent confirmations can't both
+    # read status="pending" and execute the same write twice (idempotency at
+    # the DB level). The second request blocks here until the first commits,
+    # then sees the terminal status below and returns the stored result.
+    action = (
+        db.query(AssistantPendingAction)
+        .filter(AssistantPendingAction.id == action_id)
+        .with_for_update()
+        .first()
+    )
     if not action:
         return AgentResult(uuid.uuid4(), "Действие не найдено.", [], None, [], "normal", _model_state(True))
     conversation = db.get(AssistantConversation, action.conversation_id)
     if not conversation or conversation.user_id != user.id:
         return AgentResult(action.conversation_id, "Нет доступа к этому действию.", [], None, [], "normal", _model_state(True))
+
+    # Already processed by a previous (or concurrent) confirmation.
+    if action.status and action.status != "pending":
+        if action.status == "executed" and isinstance(action.result, dict):
+            cached = action.result.get("text", "Действие уже выполнено.")
+            task_ids = [UUID(t) for t in action.result.get("task_ids", []) if t]
+            return AgentResult(conversation.id, cached, [], None, task_ids, "normal", _model_state(conversation.llm_status == "up"))
+        if action.status == "cancelled":
+            return AgentResult(conversation.id, "Действие уже отменено.", [], None, [], "normal", _model_state(conversation.llm_status == "up"))
+        return AgentResult(conversation.id, "Действие уже обработано.", [], None, [], "normal", _model_state(conversation.llm_status == "up"))
+
     if not confirm:
         action.status = "cancelled"
         db.add(action)

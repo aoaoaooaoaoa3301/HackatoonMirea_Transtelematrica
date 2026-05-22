@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_user
@@ -79,14 +79,15 @@ async def assistant_conversation(
     current_user: User = Depends(get_current_user),
 ):
     conversation, messages = assistant_agent.get_conversation_messages(db, current_user, conversation_id, channel="web")
+    available = await assistant_agent.check_llm_available()
     return {
         "conversation_id": conversation.id,
         "messages": [AssistantStoredMessage(id=item.id, role=item.role, content=item.content) for item in messages],
-        "mode": "degraded" if conversation.llm_status == "down" else "normal",
+        "mode": "normal" if available else "degraded",
         "model": {
             "provider": assistant_agent.settings.LLM_PROVIDER,
             "name": assistant_agent._model_name(),
-            "available": conversation.llm_status == "up",
+            "available": available,
         },
     }
 
@@ -125,14 +126,15 @@ async def assistant_clear_conversation(
     current_user: User = Depends(get_current_user),
 ):
     conversation = assistant_agent.clear_conversation(db, current_user, conversation_id, channel="web", external_chat_id="default")
+    available = await assistant_agent.check_llm_available()
     return {
         "conversation_id": conversation.id,
         "messages": [],
-        "mode": "degraded" if conversation.llm_status == "down" else "normal",
+        "mode": "normal" if available else "degraded",
         "model": {
             "provider": assistant_agent.settings.LLM_PROVIDER,
             "name": assistant_agent._model_name(),
-            "available": conversation.llm_status == "up",
+            "available": available,
         },
     }
 
@@ -163,6 +165,9 @@ async def ai_goal_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    goal_id = uuid.UUID(str(body.get("goal_id")))
+    try:
+        goal_id = uuid.UUID(str(body.get("goal_id")))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid goal_id")
     result = await ai_service.goal_summary(db, goal_id, current_user)
     return result

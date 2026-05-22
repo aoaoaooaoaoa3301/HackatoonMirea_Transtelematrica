@@ -1,9 +1,17 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Target, Mountain, ListTodo, CheckSquare, Calendar, Flag } from 'lucide-react';
+import { Target, Mountain, ListTodo, CheckSquare, Calendar, Flag, MoreVertical, Edit3 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -15,7 +23,10 @@ import {
   AT_RISK_STYLE,
 } from '@/lib/statusUtils';
 import { formatDateShort } from '@/lib/dateUtils';
+import { canEditTaskMeta } from '@/lib/permissions';
+import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
+import { TaskEditDialog } from '@/components/tasks/TaskEditDialog';
 import type { Task, TaskType, Priority } from '@/types';
 
 const typeIcons: Record<TaskType, React.ElementType> = {
@@ -44,10 +55,14 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, compact = false }: TaskCardProps) {
+  const currentUser = useAuthStore((s) => s.user);
+  const [editOpen, setEditOpen] = useState(false);
+
   const TypeIcon = typeIcons[task.type];
   const statusColor = STATUS_COLORS[task.status];
   const priorityColor = PRIORITY_COLORS[task.priority];
   const atRisk = isAtRisk(task.due_date, task.status);
+  const showCardMenu = !compact && canEditTaskMeta(currentUser, task);
 
   const displayStatusLabel = atRisk ? AT_RISK_STYLE.label : STATUS_LABELS[task.status];
   const displayStatusText = atRisk ? AT_RISK_STYLE.text : statusColor.text;
@@ -92,87 +107,131 @@ export function TaskCard({ task, compact = false }: TaskCardProps) {
   }
 
   return (
-    <Link to={`/tasks/${task.id}`} className="block">
-      <Card className={cn(
-        'hover:shadow-md transition-shadow cursor-pointer group overflow-hidden h-full',
-        getPriorityBorderClass(task.priority)
-      )}>
-        <CardContent className="flex flex-col p-4 h-full justify-between">
-          <div>{/* Top row: status badge left, period badge right */}
+    <>
+      <Link to={`/tasks/${task.id}`} className="block">
+        <Card className={cn(
+          'hover:shadow-md transition-shadow cursor-pointer group overflow-hidden h-full relative',
+          getPriorityBorderClass(task.priority)
+        )}>
+          {/* Hover action menu (grid variant only) */}
+          {showCardMenu && (
+            <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 bg-background/80 backdrop-blur-sm shadow-sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setEditOpen(true);
+                    }}
+                  >
+                    <Edit3 className="mr-2 h-4 w-4" />
+                    Редактировать
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
 
-          <div className="flex items-center justify-between mb-3">
-            <Badge className={cn(
-              'border-0 text-[10px] px-2 py-0.5 rounded-md font-medium',
-              displayStatusText,
-              displayStatusBg
-            )}>
-              {displayStatusLabel}
-            </Badge>
-            {periodLabel && (
-              <Badge variant="secondary" className="text-[10px] px-2 py-0.5 rounded-md font-normal text-muted-foreground">
-                {periodLabel}
+          <CardContent className="flex flex-col p-4 h-full justify-between">
+            <div>{/* Top row: status badge left, period badge right */}
+
+            <div className="flex items-center justify-between mb-3">
+              <Badge className={cn(
+                'border-0 text-[10px] px-2 py-0.5 rounded-md font-medium',
+                displayStatusText,
+                displayStatusBg
+              )}>
+                {displayStatusLabel}
               </Badge>
-            )}
-          </div>
-          
-            {/* Title */}
-          <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-3">
-              {task.title}
-          </h3>
-          </div>
-          
-
-          <div>
-            {/* Progress (for non-subtasks) */}
-            
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-muted-foreground">Прогресс</span>
-                  <span className="text-[11px] text-muted-foreground">{task.progress}%</span>
-                </div>
-                <Progress value={task.progress} className="h-1.5" />
-              </div>
-            
-
-            {/* Assignee row */}
-            {assigneeName && (
-              <div className="flex items-center gap-2 mb-3">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[12px] font-medium truncate">
-                    {assigneeName}
-                  </span>
-                  {departmentName && (
-                    <span className="text-[10px] text-muted-foreground truncate">
-                      {departmentName}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Bottom row: priority + date */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Flag className={cn('h-3 w-3', priorityColor.text)} />
-                <span className={cn('text-[11px] font-medium', priorityColor.text)}>
-                  {PRIORITY_LABELS[task.priority]}
-                </span>
-              </div>
-              {task.due_date && (
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  <span className="text-[11px]">{formatDateShort(task.due_date)}</span>
-                </div>
+              {periodLabel && (
+                <Badge variant="secondary" className="text-[10px] px-2 py-0.5 rounded-md font-normal text-muted-foreground">
+                  {periodLabel}
+                </Badge>
               )}
             </div>
 
-          </div>
+              {/* Title */}
+            <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-3">
+                {task.title}
+            </h3>
+            </div>
 
-        </CardContent>
-      </Card>
-    </Link>
+
+            <div>
+              {/* Progress (for non-subtasks) */}
+
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-muted-foreground">Прогресс</span>
+                    <span className="text-[11px] text-muted-foreground">{task.progress}%</span>
+                  </div>
+                  <Progress value={task.progress} className="h-1.5" />
+                </div>
+
+
+              {/* Assignee row */}
+              {assigneeName && (
+                <div className="flex items-center gap-2 mb-3">
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[12px] font-medium truncate">
+                      {assigneeName}
+                    </span>
+                    {departmentName && (
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        {departmentName}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom row: priority + date */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Flag className={cn('h-3 w-3', priorityColor.text)} />
+                  <span className={cn('text-[11px] font-medium', priorityColor.text)}>
+                    {PRIORITY_LABELS[task.priority]}
+                  </span>
+                </div>
+                {task.due_date && (
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span className="text-[11px]">{formatDateShort(task.due_date)}</span>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+          </CardContent>
+        </Card>
+      </Link>
+
+      {showCardMenu && (
+        <TaskEditDialog task={task} open={editOpen} onOpenChange={setEditOpen} />
+      )}
+    </>
   );
 }

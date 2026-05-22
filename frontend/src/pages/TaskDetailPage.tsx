@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
@@ -13,6 +13,8 @@ import {
   Send,
   Loader2,
   Edit3,
+  Trash2,
+  MoreVertical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,15 +26,30 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
-import { getTask, updateTask, addComment } from '@/api/tasks';
+import { TaskEditDialog } from '@/components/tasks/TaskEditDialog';
+import { getTask, updateTask, addComment, deleteTask } from '@/api/tasks';
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -43,6 +60,8 @@ import {
   TASK_EVENT_LABELS,
 } from '@/lib/statusUtils';
 import { formatDate, formatDateTime, formatRelative } from '@/lib/dateUtils';
+import { canDeleteTask, canEditTaskMeta } from '@/lib/permissions';
+import { useAuthStore } from '@/store/authStore';
 import type { TaskType, Status, Priority } from '@/types';
 
 const typeIcons: Record<TaskType, React.ElementType> = {
@@ -54,7 +73,9 @@ const typeIcons: Record<TaskType, React.ElementType> = {
 
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [commentText, setCommentText] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -62,6 +83,8 @@ export default function TaskDetailPage() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [subDialogOpen, setSubDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', id],
@@ -85,10 +108,18 @@ export default function TaskDetailPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTask(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      navigate('/tasks');
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-8 w-96" />
+        <Skeleton className="h-8 w-full max-w-sm sm:max-w-md" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <Skeleton className="h-48" />
@@ -110,6 +141,8 @@ export default function TaskDetailPage() {
 
   const TypeIcon = typeIcons[task.type];
   const statusColor = STATUS_COLORS[task.status];
+  const canEdit = canEditTaskMeta(currentUser, task);
+  const canDelete = canDeleteTask(currentUser, task);
   const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
   const departmentName = task.assigned_department_name ?? task.department?.name ?? null;
   const assigneeInitials = assigneeName
@@ -136,9 +169,9 @@ export default function TaskDetailPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="rounded-lg bg-muted p-3">
-          <TypeIcon className="h-6 w-6 text-muted-foreground" />
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="rounded-lg bg-muted p-2 sm:p-3 shrink-0">
+          <TypeIcon className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -168,7 +201,7 @@ export default function TaskDetailPage() {
                 Отмена
               </Button>
             </div>
-          ) : (
+          ) : canEdit ? (
             <h1
               className="text-xl font-bold cursor-pointer hover:text-primary/80 transition-colors group flex items-center gap-2"
               onClick={() => {
@@ -179,8 +212,36 @@ export default function TaskDetailPage() {
               {task.title}
               <Edit3 className="h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
             </h1>
+          ) : (
+            <h1 className="text-xl font-bold">{task.title}</h1>
           )}
         </div>
+        {(canEdit || canDelete) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="shrink-0">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canEdit && (
+                <DropdownMenuItem onSelect={() => setEditDialogOpen(true)}>
+                  <Edit3 className="mr-2 h-4 w-4" />
+                  Редактировать
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem
+                  className="text-rose-600 focus:text-rose-600"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Удалить
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Main content */}
@@ -215,7 +276,7 @@ export default function TaskDetailPage() {
                     </Button>
                   </div>
                 </div>
-              ) : (
+              ) : canEdit ? (
                 <p
                   className="text-sm text-muted-foreground whitespace-pre-wrap cursor-pointer hover:bg-accent/30 rounded p-2 -m-2 transition-colors"
                   onClick={() => {
@@ -224,6 +285,10 @@ export default function TaskDetailPage() {
                   }}
                 >
                   {task.description || 'Нажмите, чтобы добавить описание...'}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {task.description || 'Без описания'}
                 </p>
               )}
             </CardContent>
@@ -276,19 +341,24 @@ export default function TaskDetailPage() {
             <CardContent>
               <div className="space-y-4">
                 {task.comments?.map((comment) => {
-                  const initials = comment.author?.full_name
-                    ?.split(' ')
+                  const authorName =
+                    comment.author_name ?? comment.author?.full_name ?? 'Сотрудник';
+                  const initials = authorName
+                    .split(' ')
                     .map((n) => n[0])
                     .join('')
-                    .slice(0, 2);
+                    .slice(0, 2)
+                    .toUpperCase();
                   return (
                     <div key={comment.id} className="flex gap-3">
                       <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarFallback className="text-xs bg-primary/10">{initials}</AvatarFallback>
+                        <AvatarFallback className="text-xs bg-primary/10">
+                          {initials}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium">{comment.author?.full_name}</span>
+                          <span className="text-sm font-medium">{authorName}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatRelative(comment.created_at)}
                           </span>
@@ -497,6 +567,47 @@ export default function TaskDetailPage() {
         parentId={task.id}
         defaultType={task.type === 'GOAL' ? 'EPIC' : task.type === 'EPIC' ? 'TASK' : 'SUBTASK'}
       />
+
+      {canEdit && (
+        <TaskEditDialog
+          task={task}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+        />
+      )}
+
+      {/* Delete confirmation */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить задачу?</DialogTitle>
+            <DialogDescription>
+              «{task.title}» будет удалена безвозвратно
+              {(task.children?.length ?? 0) > 0 && (
+                <> вместе с {task.children!.length} подзадач(ами)</>
+              )}
+              . Это действие нельзя отменить.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1 h-4 w-4" />
+              )}
+              Удалить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

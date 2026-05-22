@@ -11,6 +11,8 @@ export interface TelegramLinkCode {
   code: string;
   expires_at: string;
   instruction: string;
+  deep_link?: string | null;
+  bot_username?: string | null;
 }
 
 export async function getTelegramStatus(): Promise<TelegramStatus> {

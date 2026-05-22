@@ -7,7 +7,8 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  useDroppable,
+  closestCorners,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -99,6 +100,34 @@ function SortableTask({ task }: SortableTaskProps) {
   );
 }
 
+/**
+ * A whole column registered as a droppable (id = its status). This is what
+ * makes dropping a card onto an *empty* column work: with only sortable
+ * items registered, an empty column had no drop target and the card snapped
+ * back. Now `over.id` resolves to the column status even with zero cards.
+ */
+function DroppableColumn({
+  status,
+  isEmpty,
+  children,
+}: {
+  status: Status;
+  isEmpty: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex w-72 shrink-0 flex-col rounded-lg bg-muted/50 border transition-shadow ${
+        isOver ? 'ring-2 ring-primary/60' : ''
+      } ${isEmpty ? 'min-h-[120px]' : ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 interface KanbanBoardProps {
   tasks: Task[];
   onStatusChange: (taskId: string, newStatus: Status) => void;
@@ -158,19 +187,16 @@ export function KanbanBoard({ tasks, onStatusChange }: KanbanBoardProps) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 220px)' }}>
+      <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ minHeight: 'calc(100vh - 220px)' }}>
         {COLUMNS.map((status) => {
           const col = columns[status];
           const statusStyle = STATUS_COLORS[status];
           return (
-            <div
-              key={status}
-              className="flex w-72 shrink-0 flex-col rounded-lg bg-muted/50 border"
-            >
+            <DroppableColumn key={status} status={status} isEmpty={col.length === 0}>
               <div className="flex items-center gap-2 p-3 border-b">
                 <div className={`h-2.5 w-2.5 rounded-full ${statusStyle.dot}`} />
                 <h3 className="text-sm font-semibold">{STATUS_LABELS[status]}</h3>
@@ -190,16 +216,11 @@ export function KanbanBoard({ tasks, onStatusChange }: KanbanBoardProps) {
                 </SortableContext>
                 {col.length === 0 && (
                   <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
-                    Нет задач
+                    Перетащите сюда
                   </div>
                 )}
-                {/* Drop zone for empty column */}
-                <div
-                  data-id={status}
-                  className="h-4"
-                />
               </ScrollArea>
-            </div>
+            </DroppableColumn>
           );
         })}
       </div>

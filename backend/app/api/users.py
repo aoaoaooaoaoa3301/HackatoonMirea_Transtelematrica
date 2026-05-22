@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from app.core.deps import get_db, get_current_user, require_role
+from app.core.deps import get_db, get_current_user, require_role, scoped_user_query
 from app.core.security import hash_password
 from app.models.user import User
 from app.models.enums import UserRole
@@ -40,7 +40,10 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(User)
+    # Scope the directory by role: ADMIN sees everyone, LEAD their dept
+    # subtree, EMPLOYEE their own department (+ themselves). Prevents the
+    # whole org chart leaking to every user.
+    query = scoped_user_query(db.query(User), current_user, db)
     if department_id:
         query = query.filter(User.department_id == department_id)
     if role:

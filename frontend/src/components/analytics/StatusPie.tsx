@@ -31,7 +31,7 @@ export function StatusPie({ data, title = 'Распределение по ст�
               outerRadius={100}
               paddingAngle={3}
               dataKey="value"
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
               labelLine={false}
             >
               {chartData.map((entry, index) => (

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronRight,
@@ -157,6 +158,9 @@ function DepartmentSection({
 
 export default function TeamPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  // Deep-link from the dashboard workload list: /team?user=<id> opens that
+  // employee's panel automatically once the users list is loaded.
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: departments, isLoading: deptLoading } = useQuery({
     queryKey: ['departments'],
@@ -167,6 +171,20 @@ export default function TeamPage() {
     queryKey: ['users'],
     queryFn: () => getUsers(),
   });
+
+  useEffect(() => {
+    const userId = searchParams.get('user');
+    if (userId && users && !selectedUser) {
+      const match = users.find((u) => u.id === userId);
+      if (match) {
+        setSelectedUser(match);
+        // clear the param so closing the sheet doesn't re-open it
+        searchParams.delete('user');
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, searchParams]);
 
   const { data: userTasks } = useQuery({
     queryKey: ['tasks', 'user', selectedUser?.id],

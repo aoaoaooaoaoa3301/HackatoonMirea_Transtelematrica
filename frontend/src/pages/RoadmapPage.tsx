@@ -30,10 +30,10 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 overflow-x-auto">
       {/* Header */}
-      <div className="flex items-center text-xs text-muted-foreground border-b pb-2 mb-4">
-        <div className="w-64 shrink-0 font-medium">Задача</div>
+      <div className="flex items-center text-xs text-muted-foreground border-b pb-2 mb-4 min-w-[600px]">
+        <div className="w-48 sm:w-64 shrink-0 font-medium">Задача</div>
         <div className="flex-1 flex justify-between px-4">
           <span>Кв. 1</span>
           <span>Кв. 2</span>
@@ -52,11 +52,11 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
         return (
           <div
             key={item.id}
-            className={`flex items-center gap-2 rounded-md p-2 hover:bg-accent/50 transition-colors ${
+            className={`flex items-center gap-2 rounded-md p-2 hover:bg-accent/50 transition-colors min-w-[600px] ${
               isGoal ? '' : 'ml-6'
             }`}
           >
-            <div className="w-64 shrink-0 flex items-center gap-2">
+            <div className="w-48 sm:w-64 shrink-0 flex items-center gap-2">
               <Badge variant="outline" className="text-[10px] shrink-0">
                 {item.type === 'GOAL' ? 'Цель' : 'Эпик'}
               </Badge>

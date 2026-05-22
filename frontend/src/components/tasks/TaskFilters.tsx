@@ -62,8 +62,8 @@ export function TaskFilters({ filters, onChange }: TaskFiltersProps) {
   return (
     <div className="space-y-3">
       {/* Search row */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Поиск задач..."
@@ -79,7 +79,7 @@ export function TaskFilters({ filters, onChange }: TaskFiltersProps) {
             onChange({ ...filters, department_id: v === '_all' ? undefined : v, assignee_id: undefined })
           }
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Все отделы" />
           </SelectTrigger>
           <SelectContent>
@@ -96,7 +96,7 @@ export function TaskFilters({ filters, onChange }: TaskFiltersProps) {
           value={filters.assignee_id ?? '_all'}
           onValueChange={(v) => onChange({ ...filters, assignee_id: v === '_all' ? undefined : v })}
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Все исполнители" />
           </SelectTrigger>
           <SelectContent>
@@ -125,7 +125,7 @@ export function TaskFilters({ filters, onChange }: TaskFiltersProps) {
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2">
         {/* Type chips */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <span className="text-xs text-muted-foreground mr-1">Тип:</span>
           {ALL_TASK_TYPES.map((t) => (
             <Badge
@@ -139,10 +139,10 @@ export function TaskFilters({ filters, onChange }: TaskFiltersProps) {
           ))}
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="h-6 w-px bg-border hidden sm:block" />
 
         {/* Status chips */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <span className="text-xs text-muted-foreground mr-1">Статус:</span>
           {ALL_STATUSES.map((s) => {
             const active = filters.status?.includes(s);
@@ -161,10 +161,10 @@ export function TaskFilters({ filters, onChange }: TaskFiltersProps) {
           })}
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="h-6 w-px bg-border hidden sm:block" />
 
         {/* Priority chips */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <span className="text-xs text-muted-foreground mr-1">Приоритет:</span>
           {ALL_PRIORITIES.map((p) => {
             const active = filters.priority?.includes(p);

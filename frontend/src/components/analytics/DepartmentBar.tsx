@@ -27,7 +27,8 @@ export function DepartmentBar({ data }: DepartmentBarProps) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Задачи по отделам</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-x-auto">
+        <div className="min-w-[360px]">
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data} layout="vertical" margin={{ left: 20 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
@@ -52,6 +53,7 @@ export function DepartmentBar({ data }: DepartmentBarProps) {
             <Bar dataKey="overdue" name="Просрочено" stackId="a" fill="#e11d48" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -11,8 +10,6 @@ import {
   Users,
   Sparkles,
   ChevronRight,
-  Plus,
-  Download,
   AlertCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +19,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusPie } from '@/components/analytics/StatusPie';
 import { DepartmentBar } from '@/components/analytics/DepartmentBar';
-import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { getAnalyticsOverview, getWorkloadAnalytics } from '@/api/analytics';
 import { getRisks, getDigest } from '@/api/ai';
 import { getCapacityColor, getCapacityBgColor } from '@/lib/statusUtils';
@@ -40,6 +36,8 @@ interface StatCardProps {
   iconColorClass?: string;
   iconBgClass?: string;
   loading?: boolean;
+  /** When set, the whole card becomes a link (e.g. to a filtered task list). */
+  to?: string;
 }
 
 function StatCard({
@@ -51,6 +49,7 @@ function StatCard({
   iconColorClass = 'text-primary',
   iconBgClass = 'bg-primary/15',
   loading,
+  to,
 }: StatCardProps) {
   const deltaTextColor =
     deltaColor === 'positive'
@@ -59,29 +58,37 @@ function StatCard({
         ? 'text-rose-500'
         : 'text-muted-foreground';
 
-  return (
-    <Card>
-      <CardContent className="p-5">
+  const card = (
+    <Card className={`h-full ${to ? 'transition-colors hover:border-primary/50 hover:bg-secondary/40' : ''}`}>
+      <CardContent className="p-4 sm:p-5">
         {loading ? (
           <div className="space-y-2">
-            <Skeleton className="h-10 w-10 rounded-md" />
+            <Skeleton className="h-9 w-9 rounded-md" />
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-8 w-16" />
           </div>
         ) : (
           <>
-            <div className={`flex h-10 w-10 items-center justify-center rounded-md ${iconBgClass}`}>
+            <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-md ${iconBgClass}`}>
               <Icon className={`h-5 w-5 ${iconColorClass}`} />
             </div>
-            <p className="text-sm text-muted-foreground mt-3">{title}</p>
-            <p className="text-3xl font-semibold mt-1">{value}</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2 sm:mt-3 truncate">{title}</p>
+            <p className="text-2xl sm:text-3xl font-semibold mt-0.5 sm:mt-1">{value}</p>
             {delta && (
-              <p className={`text-xs mt-1 ${deltaTextColor}`}>{delta}</p>
+              <p className={`text-[11px] sm:text-xs mt-0.5 sm:mt-1 ${deltaTextColor} truncate`}>{delta}</p>
             )}
           </>
         )}
       </CardContent>
     </Card>
+  );
+
+  return to && !loading ? (
+    <Link to={to} className="block">
+      {card}
+    </Link>
+  ) : (
+    card
   );
 }
 
@@ -161,11 +168,11 @@ function AISidebarPanel() {
       iconBg: 'bg-rose-500/15',
       iconColor: 'text-rose-500',
       icon: AlertTriangle,
-      title: `${highRisks.length} ${highRisks.length === 1 ? 'задача просрочена' : highRisks.length < 5 ? 'задачи просрочены' : 'задач просрочено'}`,
+      title: `${highRisks.length} ${highRisks.length === 1 ? 'задача требует внимания' : highRisks.length < 5 ? 'задачи требуют внимания' : 'задач требуют внимания'}`,
       description: highRisks.length > 0
-        ? `Обратите внимание: ${highRisks.slice(0, 2).map((r) => r.task_title).join(', ')}`
+        ? `Высокий риск: ${highRisks.slice(0, 2).map((r) => r.task_title).join(', ')}`
         : 'Проверьте задачи с высоким риском',
-      link: highRisks.length === 1 ? `/tasks/${highRisks[0].task_id}` : '/tasks',
+      link: highRisks.length === 1 ? `/tasks/${highRisks[0].task_id}` : '/tasks?tab=list&status=OVERDUE',
     });
   }
 
@@ -211,14 +218,14 @@ function AISidebarPanel() {
   }
 
   return (
-    <Card>
+    <Card className="w-full flex flex-col">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           AI-рекомендации
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col flex-1">
         {isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -250,7 +257,7 @@ function AISidebarPanel() {
             ))}
           </div>
         )}
-        <div className="mt-3">
+        <div className="mt-auto pt-3">
           <Link to="/ai">
             <Button variant="ghost" size="sm" className="w-full text-primary hover:text-primary hover:bg-primary/10">
               Показать все рекомендации
@@ -260,35 +267,6 @@ function AISidebarPanel() {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Quick Actions Card                                                 */
-/* ------------------------------------------------------------------ */
-
-function QuickActionsCard() {
-  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-
-  return (
-    <>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Быстрые действия</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Button className="w-full" size="sm" onClick={() => setTaskDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Создать задачу
-          </Button>
-          <Button variant="outline" className="w-full" size="sm" disabled>
-            <Download className="mr-2 h-4 w-4" />
-            Импорт задач
-          </Button>
-        </CardContent>
-      </Card>
-      <TaskFormDialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen} />
-    </>
   );
 }
 
@@ -312,56 +290,61 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Stat cards - 5 cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatCard
           title="Всего задач"
           value={overview?.total_tasks ?? 0}
           icon={ListTodo}
-          delta="+12 за неделю"
-          deltaColor="positive"
+          delta="Все задачи"
+          deltaColor="neutral"
           iconColorClass="text-primary"
           iconBgClass="bg-primary/15"
           loading={overviewLoading}
+          to="/tasks?tab=list"
         />
         <StatCard
           title="Выполнено"
           value={overview?.done ?? 0}
           icon={CheckCircle2}
-          delta="+8 за неделю"
+          delta="Готовые задачи"
           deltaColor="positive"
           iconColorClass="text-emerald-500"
           iconBgClass="bg-emerald-500/15"
           loading={overviewLoading}
+          to="/tasks?tab=list&status=DONE"
         />
         <StatCard
           title="В работе"
           value={overview?.in_progress ?? 0}
           icon={PlayCircle}
-          delta="+3 от прошлой"
+          delta="Активные сейчас"
           deltaColor="neutral"
           iconColorClass="text-sky-500"
           iconBgClass="bg-sky-500/15"
           loading={overviewLoading}
+          to="/tasks?tab=list&status=IN_PROGRESS"
         />
         <StatCard
           title="Просрочено"
           value={overview?.overdue ?? 0}
           icon={Clock}
-          delta={overview?.overdue ? `-${overview.overdue} требуют внимания` : 'Нет просроченных'}
+          delta={overview?.overdue ? 'Требуют внимания' : 'Нет просроченных'}
           deltaColor={overview?.overdue ? 'negative' : 'positive'}
           iconColorClass="text-rose-500"
           iconBgClass="bg-rose-500/15"
           loading={overviewLoading}
+          to="/tasks?tab=list&status=OVERDUE"
         />
         <StatCard
-          title="Высокий приоритет"
+          title="В зоне риска"
           value={overview?.at_risk ?? 0}
           icon={AlertTriangle}
-          delta="В зоне риска"
+          delta="Дедлайн ≤ 3 дней"
           deltaColor="neutral"
           iconColorClass="text-violet-500"
           iconBgClass="bg-violet-500/15"
           loading={overviewLoading}
+          to="/tasks?tab=list"
         />
       </div>
 
@@ -382,9 +365,8 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-        <div className="space-y-4">
+        <div className="flex">
           <AISidebarPanel />
-          <QuickActionsCard />
         </div>
       </div>
 
@@ -414,9 +396,14 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {topWorkload?.map((entry) => (
-                  <div key={entry.user_id} className="flex items-center gap-3">
-                    <span className="text-sm w-36 truncate">{entry.full_name}</span>
-                    <div className="flex-1">
+                  <Link
+                    key={entry.user_id}
+                    to={`/team?user=${entry.user_id}`}
+                    className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap rounded-md px-2 -mx-2 py-1 hover:bg-secondary/50 transition-colors"
+                    title="Открыть карточку сотрудника"
+                  >
+                    <span className="text-sm w-full sm:w-36 truncate">{entry.full_name}</span>
+                    <div className="flex-1 min-w-0">
                       <Progress
                         value={Math.min(entry.capacity_util, 150)}
                         max={150}
@@ -424,16 +411,16 @@ export default function DashboardPage() {
                         indicatorClassName={getCapacityBgColor(entry.capacity_util)}
                       />
                     </div>
-                    <span className={`text-sm font-medium w-12 text-right ${getCapacityColor(entry.capacity_util)}`}>
+                    <span className={`text-sm font-medium w-12 text-right shrink-0 ${getCapacityColor(entry.capacity_util)}`}>
                       {Math.round(entry.capacity_util)}%
                     </span>
-                    <div className="flex gap-2 text-xs text-muted-foreground w-32">
+                    <div className="hidden sm:flex gap-2 text-xs text-muted-foreground w-32 shrink-0">
                       <span>{entry.open_tasks} задач</span>
                       {entry.overdue > 0 && (
                         <span className="text-rose-500">{entry.overdue} просроч.</span>
                       )}
                     </div>
-                  </div>
+                  </Link>
                 ))}
                 {(!topWorkload || topWorkload.length === 0) && (
                   <p className="text-sm text-muted-foreground text-center py-8">

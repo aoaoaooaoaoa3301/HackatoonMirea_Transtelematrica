@@ -9,9 +9,9 @@ export default function AIPage() {
   const { user } = useAuth();
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7rem)]">
+    <div className="flex flex-col h-[calc(100vh-6rem)] sm:h-[calc(100vh-7rem)]">
       {/* Context toggle */}
-      <div className="flex items-center justify-end gap-3 pb-3 border-b mb-0">
+      <div className="flex items-center justify-end gap-2 sm:gap-3 pb-3 border-b mb-0 flex-wrap">
         <Label htmlFor="scope-toggle" className="text-sm text-muted-foreground">
           Контекст:
         </Label>

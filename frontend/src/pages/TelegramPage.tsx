@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bot, CheckCircle2, Copy, Link2, RefreshCw } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Bot, CheckCircle2, Copy, Link2, RefreshCw, QrCode, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +25,7 @@ export default function TelegramPage() {
   const expiresAt = linkCode ? new Date(linkCode.expires_at).toLocaleString('ru-RU') : null;
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Telegram-бот</h1>
         <p className="text-sm text-muted-foreground">
@@ -78,20 +79,56 @@ export default function TelegramPage() {
               </Button>
 
               {linkCode && (
-                <div className="flex flex-col gap-3 rounded-md border p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="font-mono text-3xl font-semibold tracking-normal">{linkCode.code}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigator.clipboard.writeText(`/link ${linkCode.code}`)}
-                    >
-                      <Copy data-icon="inline-start" />
-                      Скопировать
-                    </Button>
+                <div className="flex flex-col gap-4 rounded-md border p-4 sm:flex-row sm:items-start">
+                  {/* QR — scan to auto-link without typing the code.
+                      Shown only when the bot username is configured
+                      (otherwise deep_link is null → fall back to code). */}
+                  {linkCode.deep_link && (
+                    <div className="flex flex-col items-center gap-2 shrink-0">
+                      <div className="rounded-lg bg-white p-3">
+                        <QRCodeSVG value={linkCode.deep_link} size={160} level="M" />
+                      </div>
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <QrCode className="h-3 w-3" />
+                        Наведите камеру Telegram
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-1 flex-col gap-3">
+                    {linkCode.deep_link && (
+                      <a href={linkCode.deep_link} target="_blank" rel="noopener noreferrer">
+                        <Button className="w-full sm:w-auto">
+                          <ExternalLink data-icon="inline-start" />
+                          Открыть бота и подключить
+                        </Button>
+                      </a>
+                    )}
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        Или введите код вручную командой <code>/link</code>:
+                      </span>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="font-mono text-3xl font-semibold tracking-normal">
+                          {linkCode.code}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigator.clipboard.writeText(`/link ${linkCode.code}`)}
+                        >
+                          <Copy data-icon="inline-start" />
+                          Скопировать
+                        </Button>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">{linkCode.instruction}</p>
+                    {expiresAt && (
+                      <p className="text-xs text-muted-foreground">Код действует до {expiresAt}</p>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground">{linkCode.instruction}</p>
-                  {expiresAt && <p className="text-xs text-muted-foreground">Код действует до {expiresAt}</p>}
                 </div>
               )}
             </div>

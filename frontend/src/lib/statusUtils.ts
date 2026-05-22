@@ -76,6 +76,8 @@ export const TASK_EVENT_LABELS: Record<string, string> = {
   assignment_changed: 'Изменено назначение',
   status_changed: 'Изменён статус',
   progress_updated: 'Обновлён прогресс',
+  due_date_changed: 'Изменён дедлайн',
+  department_changed: 'Изменён отдел',
   comment_added: 'Добавлен комментарий',
 };
 
