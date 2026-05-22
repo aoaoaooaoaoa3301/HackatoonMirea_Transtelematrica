@@ -10,9 +10,35 @@ export interface User {
   full_name: string;
   role: Role;
   department_id: string | null;
+  department_name?: string | null;
   skills: string[];
   seniority: string | null;
   capacity_hours_per_week: number;
+  active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserCreatePayload {
+  full_name: string;
+  email: string;
+  password: string;
+  role: Role;
+  department_id?: string | null;
+  skills?: string[];
+  seniority?: string | null;
+  capacity_hours_per_week?: number;
+}
+
+export interface UserUpdatePayload {
+  full_name?: string;
+  email?: string;
+  role?: Role;
+  department_id?: string | null;
+  skills?: string[];
+  seniority?: string | null;
+  active?: boolean;
+  password?: string;
 }
 
 export interface Department {
@@ -20,6 +46,21 @@ export interface Department {
   name: string;
   parent_id: string | null;
   head_user_id: string | null;
+  head_user_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DepartmentCreatePayload {
+  name: string;
+  parent_id?: string | null;
+  head_user_id?: string | null;
+}
+
+export interface DepartmentUpdatePayload {
+  name?: string;
+  parent_id?: string | null;
+  head_user_id?: string | null;
 }
 
 export interface Task {

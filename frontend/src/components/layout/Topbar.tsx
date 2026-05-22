@@ -17,6 +17,7 @@ const pageTitles: Record<string, string> = {
   '/team': 'Команда',
   '/ai': 'AI-помощник',
   '/telegram': 'Telegram-бот',
+  '/admin': 'Администрирование',
 };
 
 interface TopbarProps {

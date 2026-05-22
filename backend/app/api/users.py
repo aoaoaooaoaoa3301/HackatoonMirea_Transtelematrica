@@ -114,6 +114,12 @@ def update_user(
             if key not in allowed_self:
                 del update_data[key]
 
+    # Email uniqueness check when email is being changed
+    if "email" in update_data and update_data["email"] != user.email:
+        existing = db.query(User).filter(User.email == update_data["email"]).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+
     for key, val in update_data.items():
         if key == "password":
             user.password_hash = hash_password(val)

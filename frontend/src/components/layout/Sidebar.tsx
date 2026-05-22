@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,14 +35,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { ROLE_LABELS } from '@/lib/statusUtils';
 
 const navItems = [
-  { path: '/', label: 'Дашборд', icon: LayoutDashboard },
-  { path: '/tasks', label: 'Задачи', icon: ListTodo },
-  { path: '/kanban', label: 'Канбан', icon: KanbanSquare },
-  { path: '/roadmap', label: 'Roadmap', icon: Target },
-  { path: '/analytics', label: 'Аналитика', icon: BarChart3 },
-  { path: '/team', label: 'Команда', icon: Users },
-  { path: '/ai', label: 'AI-помощник', icon: Sparkles },
-  { path: '/telegram', label: 'Telegram', icon: MessageCircle },
+  { path: '/', label: 'Дашборд', icon: LayoutDashboard, adminOnly: false },
+  { path: '/tasks', label: 'Задачи', icon: ListTodo, adminOnly: false },
+  { path: '/kanban', label: 'Канбан', icon: KanbanSquare, adminOnly: false },
+  { path: '/roadmap', label: 'Roadmap', icon: Target, adminOnly: false },
+  { path: '/analytics', label: 'Аналитика', icon: BarChart3, adminOnly: false },
+  { path: '/team', label: 'Команда', icon: Users, adminOnly: false },
+  { path: '/ai', label: 'AI-помощник', icon: Sparkles, adminOnly: false },
+  { path: '/telegram', label: 'Telegram', icon: MessageCircle, adminOnly: false },
+  { path: '/admin', label: 'Администрирование', icon: Shield, adminOnly: true },
 ];
 
 interface SidebarProps {
@@ -61,12 +63,14 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
     .slice(0, 2)
     .toUpperCase() ?? '?';
 
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || user?.role === 'ADMIN');
+
   /** Shared navigation content used by both desktop sidebar and mobile drawer */
   function NavContent({ onNavigate }: { onNavigate?: () => void }) {
     return (
       <>
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive =
               item.path === '/'
                 ? location.pathname === '/'
@@ -160,7 +164,7 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive =
               item.path === '/'
                 ? location.pathname === '/'

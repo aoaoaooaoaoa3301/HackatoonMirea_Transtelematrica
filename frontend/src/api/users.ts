@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { User, UserWorkload, Role } from '@/types';
+import type { User, UserWorkload, Role, UserCreatePayload, UserUpdatePayload } from '@/types';
 
 export async function getUsers(params?: { department_id?: string; role?: Role }): Promise<User[]> {
   const res = await apiClient.get<User[]>('/users', { params });
@@ -8,5 +8,15 @@ export async function getUsers(params?: { department_id?: string; role?: Role })
 
 export async function getUserWorkload(userId: string): Promise<UserWorkload> {
   const res = await apiClient.get<UserWorkload>(`/users/${userId}/workload`);
+  return res.data;
+}
+
+export async function createUser(payload: UserCreatePayload): Promise<User> {
+  const res = await apiClient.post<User>('/users', payload);
+  return res.data;
+}
+
+export async function updateUser(id: string, payload: UserUpdatePayload): Promise<User> {
+  const res = await apiClient.patch<User>(`/users/${id}`, payload);
   return res.data;
 }
