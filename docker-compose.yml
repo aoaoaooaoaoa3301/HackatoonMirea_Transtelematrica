@@ -72,6 +72,7 @@ services:
       OPENAI_COMPATIBLE_APP_TITLE: ${OPENAI_COMPATIBLE_APP_TITLE:-TTM Task Assistant}
       TELEGRAM_INTERNAL_TOKEN: ${TELEGRAM_INTERNAL_TOKEN:-change-me}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost}
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://localhost
     depends_on:

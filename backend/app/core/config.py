@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     TELEGRAM_LINK_CODE_TTL_MINUTES: int = 15
     # Bot @username (without @) — used to build t.me deep links / QR codes.
     TELEGRAM_BOT_USERNAME: str = ""
+    # Bot token for sending notifications (e.g. "123456:ABC-DEF...").
+    # When empty/unset, Telegram notifications are silently skipped.
+    TELEGRAM_BOT_TOKEN: str = ""
     # Public base URL of the web app — used to turn task IDs into clickable
     # links inside Telegram messages (e.g. http://localhost/tasks/<id>).
     APP_PUBLIC_URL: str = "http://localhost"

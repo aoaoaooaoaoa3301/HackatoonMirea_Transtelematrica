@@ -22,6 +22,7 @@ from app.services.task_service import (
     compute_period_bucket, infer_child_type, log_history,
     recompute_parent_progress, get_parent_chain, build_tree,
 )
+from app.services.notifications import notify_task_assignee, task_link
 
 # ── RU ↔ Enum maps for Excel import / export ────────────────────────────
 
@@ -462,6 +463,16 @@ def create_task(
 
     db.commit()
     db.refresh(task)
+
+    # Best-effort Telegram notification (after commit, never raises)
+    if task.assignee_id and task.assignee_id != current_user.id:
+        link = task_link(task.id)
+        notify_task_assignee(
+            db,
+            task.assignee_id,
+            f'Вам назначена задача: "{task.title}"\n{link}',
+        )
+
     return _task_out(task)
 
 
@@ -603,6 +614,20 @@ def update_task(
     recompute_parent_progress(db, task)
     db.commit()
 
+    # Best-effort Telegram notification on assignee change (after commit, never raises)
+    if (
+        "assignee_id" in update_data
+        and task.assignee_id
+        and task.assignee_id != old_assignee
+        and task.assignee_id != current_user.id
+    ):
+        link = task_link(task.id)
+        notify_task_assignee(
+            db,
+            task.assignee_id,
+            f'Вам назначена задача: "{task.title}"\n{link}',
+        )
+
     return _task_out(task)
 
 
@@ -639,6 +664,15 @@ def add_comment(
     log_history(db, task_id, "comment_added", current_user.id, {"body": body.body[:200]})
     db.commit()
     db.refresh(comment)
+
+    # Best-effort Telegram notification to assignee (after commit, never raises)
+    if task.assignee_id and task.assignee_id != current_user.id:
+        link = task_link(task.id)
+        notify_task_assignee(
+            db,
+            task.assignee_id,
+            f'Новый комментарий к задаче "{task.title}":\n{link}',
+        )
 
     return {
         "id": comment.id,
