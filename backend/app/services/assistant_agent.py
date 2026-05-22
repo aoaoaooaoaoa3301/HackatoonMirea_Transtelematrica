@@ -203,6 +203,19 @@ def _model_state(available: bool) -> dict[str, Any]:
     return {"provider": settings.LLM_PROVIDER, "name": _model_name(), "available": available}
 
 
+def _system_prompt() -> str:
+    """System prompt + the assistant's *real* model identity, so it stops
+    hallucinating things like "GPT-4" when asked what model it is."""
+    return (
+        AGENT_SYSTEM_PROMPT
+        + f"\n\nФАКТ О СЕБЕ: ты работаешь на модели «{_model_name()}» "
+        f"через провайдера «{settings.LLM_PROVIDER}». "
+        "Если спрашивают, какая ты модель или на чём построена — назови ИМЕННО это "
+        "значение модели. Никогда не выдумывай другое имя (например, GPT-4), "
+        "если оно не совпадает с указанным выше."
+    )
+
+
 def _json_default(value: Any) -> str:
     if isinstance(value, (UUID, date, datetime)):
         return str(value)
@@ -457,7 +470,7 @@ def _set_last_tasks(conversation: AssistantConversation, tasks: list[Task]) -> N
 
 async def _ask_agent(prompt: str) -> tuple[Optional[dict[str, Any]], bool]:
     try:
-        raw = await get_llm_provider().generate(prompt, system=AGENT_SYSTEM_PROMPT, json_mode=True, temperature=0.1)
+        raw = await get_llm_provider().generate(prompt, system=_system_prompt(), json_mode=True, temperature=0.1)
     except Exception:
         return None, False
     if not raw:
