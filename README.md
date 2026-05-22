@@ -18,7 +18,7 @@
 | Канбан | Drag-and-drop через @dnd-kit |
 | Roadmap | Древовидный + Gantt-like вид только GOAL/EPIC для CEO |
 | AI-помощник | 7 функций (см. ниже), LLM provider abstraction, rule-based fallback |
-| Telegram-бот | Optional adapter через backend API, без прямого доступа к БД |
+| Telegram-бот | Optional adapter через backend API, без прямого доступа к БД. Ссылка на бота - @TranstelematikaAIassistant_bot, для подключения введите в чат боту /link [код из приложения]
 | RBAC | 3 роли (EMPLOYEE / LEAD / ADMIN) + scoping по отделу |
 
 ### AI-функции
