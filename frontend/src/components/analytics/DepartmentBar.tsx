@@ -32,8 +32,8 @@ export function DepartmentBar({ data }: DepartmentBarProps) {
       <CardHeader className="pb-2 flex-none">
         <CardTitle className="text-base">Задачи по отделам</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col min-h-[280px]">
-        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-2">
+      <CardContent className="flex flex-1 flex-col">
+        <div className="h-[280px] min-h-[280px] overflow-x-auto overflow-y-hidden px-2">
           <div className="min-w-[420px] h-full w-full py-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} layout="vertical" margin={{ left: 20, right: 20, top: 0, bottom: 0 }} barSize={16}>

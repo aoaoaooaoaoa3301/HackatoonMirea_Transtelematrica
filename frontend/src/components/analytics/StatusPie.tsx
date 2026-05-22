@@ -20,8 +20,8 @@ export function StatusPie({ data, title = 'Распределение по ст�
       <CardHeader className="pb-2 flex-none">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col min-h-[280px]">
-        <div className="min-h-0 flex-1">
+      <CardContent className="flex flex-1 flex-col">
+        <div className="h-[280px] min-h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
