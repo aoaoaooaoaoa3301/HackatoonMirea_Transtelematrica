@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { LayoutGrid, List, Plus, Inbox, Network, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,14 +13,28 @@ import { TaskGraphView } from '@/components/tasks/TaskGraphView';
 import { getTasks } from '@/api/tasks';
 import { useAuthStore } from '@/store/authStore';
 import { canCreateTask } from '@/lib/permissions';
-import type { TaskFilters as TFilters } from '@/types';
+import type { TaskFilters as TFilters, Status, Priority } from '@/types';
 
 type ViewTab = 'strategy' | 'graph' | 'list';
 
 export default function TasksPage() {
   const user = useAuthStore((s) => s.user);
-  const [tab, setTab] = useState<ViewTab>('strategy');
-  const [filters, setFilters] = useState<TFilters>({});
+  // Allow deep-linking from the dashboard, e.g. /tasks?tab=list&status=OVERDUE.
+  const [searchParams] = useSearchParams();
+  const paramTab = searchParams.get('tab');
+  const paramStatus = searchParams.get('status');
+  const paramPriority = searchParams.get('priority');
+  const paramDept = searchParams.get('department_id');
+  const [tab, setTab] = useState<ViewTab>(
+    paramTab === 'list' || paramTab === 'graph' || paramTab === 'strategy' ? paramTab : 'strategy'
+  );
+  const [filters, setFilters] = useState<TFilters>(() => {
+    const init: TFilters = {};
+    if (paramStatus) init.status = paramStatus.split(',') as Status[];
+    if (paramPriority) init.priority = paramPriority.split(',') as Priority[];
+    if (paramDept) init.department_id = paramDept;
+    return init;
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -58,7 +73,7 @@ export default function TasksPage() {
           </TabsList>
         </Tabs>
         {canCreateTask(user) && (
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button className="hidden sm:inline-flex" onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4 sm:mr-1" />
             <span className="hidden sm:inline">Создать</span>
           </Button>

@@ -30,9 +30,9 @@ export function AppShell() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
-      <div className="flex flex-1 flex-col ml-0 lg:ml-64 peer-[.sidebar-collapsed]:lg:ml-16 transition-all">
+      <div className="flex flex-1 flex-col min-w-0 ml-0 lg:ml-64 peer-[.sidebar-collapsed]:lg:ml-16 transition-all">
         <Topbar onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           <Outlet />
         </main>
       </div>

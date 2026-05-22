@@ -752,6 +752,12 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
   // Pan + zoom
   const [transform, setTransform] = useState({ x: 20, y: 12, k: 0.85 });
   const panStateRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  // Mirror current transform in a ref so native (non-React) touch handlers
+  // can read the live value without stale closures.
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
 
   // Resize
   useEffect(() => {
@@ -1054,6 +1060,86 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  // Touch pan (1 finger) + pinch zoom (2 fingers). Native non-passive
+  // listeners so we can preventDefault and stop the page from scrolling
+  // while the user drags the canvas. Taps on cards/buttons fall through
+  // (single-finger gestures that start on a node don't pan).
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    let mode: 'none' | 'pan' | 'pinch' = 'none';
+    let startX = 0,
+      startY = 0,
+      baseX = 0,
+      baseY = 0,
+      startDist = 0,
+      baseK = 0,
+      pinchCx = 0,
+      pinchCy = 0;
+    const dist = (a: Touch, b: Touch) =>
+      Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const onStart = (e: TouchEvent) => {
+      const target = e.target as Element;
+      const onNode = !!target.closest('[data-node-id]') || !!target.closest('button');
+      if (e.touches.length === 1) {
+        if (onNode) {
+          mode = 'none';
+          return;
+        }
+        mode = 'pan';
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        baseX = transformRef.current.x;
+        baseY = transformRef.current.y;
+      } else if (e.touches.length === 2) {
+        mode = 'pinch';
+        startDist = dist(e.touches[0], e.touches[1]) || 1;
+        baseK = transformRef.current.k;
+        baseX = transformRef.current.x;
+        baseY = transformRef.current.y;
+        const rect = el.getBoundingClientRect();
+        pinchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+        pinchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      }
+    };
+    const onMove = (e: TouchEvent) => {
+      if (mode === 'none') return;
+      e.preventDefault();
+      if (mode === 'pan' && e.touches.length === 1) {
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        setTransform((t) => ({ ...t, x: baseX + dx, y: baseY + dy }));
+      } else if (mode === 'pinch' && e.touches.length === 2) {
+        const ratio = dist(e.touches[0], e.touches[1]) / startDist;
+        const newK = Math.max(0.35, Math.min(1.8, baseK * ratio));
+        const nx = pinchCx - (pinchCx - baseX) * (newK / baseK);
+        const ny = pinchCy - (pinchCy - baseY) * (newK / baseK);
+        setTransform({ x: nx, y: ny, k: newK });
+      }
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        mode = 'none';
+      } else if (e.touches.length === 1) {
+        mode = 'pan';
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        baseX = transformRef.current.x;
+        baseY = transformRef.current.y;
+      }
+    };
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
   const zoomIn = () => setTransform((t) => ({ ...t, k: Math.min(1.8, t.k * 1.2) }));
   const zoomOut = () => setTransform((t) => ({ ...t, k: Math.max(0.35, t.k / 1.2) }));
 
@@ -1089,34 +1175,36 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
         ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="absolute top-[58px] left-3 z-10 flex gap-2 flex-wrap items-center">
-        <Button size="sm" variant="secondary" onClick={expandAll}>
-          Раскрыть всё
+      {/* Toolbar — floating control panel. Compact + translucent on mobile
+          so it reads as an intentional overlay rather than colliding chrome. */}
+      <div className="absolute top-[56px] left-2 right-2 sm:left-3 sm:right-auto z-10 flex gap-1.5 sm:gap-2 flex-wrap items-center rounded-lg border bg-background/80 backdrop-blur p-1.5 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-0">
+        <Button size="sm" variant="secondary" className="h-8 px-2 text-xs" onClick={expandAll}>
+          <span className="hidden sm:inline">Раскрыть всё</span>
+          <span className="sm:hidden">Все</span>
         </Button>
-        <Button size="sm" variant="outline" onClick={collapseToGoals}>
-          <RotateCcw className="mr-1 h-3 w-3" />
-          Только цели
+        <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={collapseToGoals}>
+          <RotateCcw className="h-3.5 w-3.5 sm:mr-1 sm:h-3 sm:w-3" />
+          <span className="hidden sm:inline">Только цели</span>
         </Button>
-        <Button size="sm" variant="outline" onClick={fitToView}>
-          <Maximize2 className="mr-1 h-3 w-3" />
-          Уместить
+        <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={fitToView}>
+          <Maximize2 className="h-3.5 w-3.5 sm:mr-1 sm:h-3 sm:w-3" />
+          <span className="hidden sm:inline">Уместить</span>
         </Button>
         <div className="flex rounded-md border bg-background">
-          <Button size="sm" variant="ghost" className="h-9 rounded-r-none" onClick={zoomOut}>
-            <ZoomOut className="h-3 w-3" />
+          <Button size="sm" variant="ghost" className="h-8 rounded-r-none px-2" onClick={zoomOut}>
+            <ZoomOut className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" className="h-9 rounded-l-none" onClick={zoomIn}>
-            <ZoomIn className="h-3 w-3" />
+          <Button size="sm" variant="ghost" className="h-8 rounded-l-none px-2" onClick={zoomIn}>
+            <ZoomIn className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <div className="relative">
+        <div className="relative flex-1 min-w-[7rem] sm:flex-none">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="Найти задачу…"
-            className="h-9 pl-7 pr-7 w-52 text-xs"
+            placeholder="Найти…"
+            className="h-8 pl-7 pr-7 w-full sm:w-52 text-xs"
           />
           {searchQ && (
             <button
@@ -1150,7 +1238,7 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
       )}
 
       <div
-        className="absolute bottom-3 left-3 z-10 text-[10px] text-muted-foreground bg-background/80 backdrop-blur rounded px-2 py-1 pointer-events-none"
+        className="absolute bottom-3 left-3 z-10 hidden sm:block text-[10px] text-muted-foreground bg-background/80 backdrop-blur rounded px-2 py-1 pointer-events-none"
         style={{
           right: selectedTask ? 360 : 12,
           transition: 'right 250ms ease',

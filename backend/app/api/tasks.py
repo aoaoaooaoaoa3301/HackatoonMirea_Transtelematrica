@@ -240,6 +240,8 @@ def update_task(
     old_status = task.status
     old_assignee = task.assignee_id
     old_progress = task.progress
+    old_due = task.due_date
+    old_dept = task.assigned_department_id
 
     for key, val in update_data.items():
         setattr(task, key, val)
@@ -267,6 +269,21 @@ def update_task(
         log_history(db, task.id, "progress_updated", current_user.id, {
             "old": old_progress,
             "new": task.progress,
+        })
+
+    if "due_date" in update_data and update_data.get("due_date") != old_due:
+        log_history(db, task.id, "due_date_changed", current_user.id, {
+            "old": old_due.isoformat() if old_due else None,
+            "new": task.due_date.isoformat() if task.due_date else None,
+        })
+
+    if "assigned_department_id" in update_data and update_data.get("assigned_department_id") != old_dept:
+        from app.models.department import Department
+        new_dept = db.get(Department, task.assigned_department_id) if task.assigned_department_id else None
+        log_history(db, task.id, "department_changed", current_user.id, {
+            "old_department_id": str(old_dept) if old_dept else None,
+            "new_department_id": str(task.assigned_department_id) if task.assigned_department_id else None,
+            "new_department_name": new_dept.name if new_dept else None,
         })
 
     db.commit()

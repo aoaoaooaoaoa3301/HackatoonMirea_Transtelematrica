@@ -14,6 +14,7 @@ import {
   Loader2,
   Edit3,
   Trash2,
+  MoreVertical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,8 +40,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
+import { TaskEditDialog } from '@/components/tasks/TaskEditDialog';
 import { getTask, updateTask, addComment, deleteTask } from '@/api/tasks';
 import {
   STATUS_LABELS,
@@ -76,6 +84,7 @@ export default function TaskDetailPage() {
   const [descDraft, setDescDraft] = useState('');
   const [subDialogOpen, setSubDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', id],
@@ -207,16 +216,31 @@ export default function TaskDetailPage() {
             <h1 className="text-xl font-bold">{task.title}</h1>
           )}
         </div>
-        {canDelete && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 border-rose-500/30 shrink-0"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Удалить</span>
-          </Button>
+        {(canEdit || canDelete) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="shrink-0">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canEdit && (
+                <DropdownMenuItem onSelect={() => setEditDialogOpen(true)}>
+                  <Edit3 className="mr-2 h-4 w-4" />
+                  Редактировать
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem
+                  className="text-rose-600 focus:text-rose-600"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Удалить
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
@@ -317,19 +341,24 @@ export default function TaskDetailPage() {
             <CardContent>
               <div className="space-y-4">
                 {task.comments?.map((comment) => {
-                  const initials = comment.author?.full_name
-                    ?.split(' ')
+                  const authorName =
+                    comment.author_name ?? comment.author?.full_name ?? 'Сотрудник';
+                  const initials = authorName
+                    .split(' ')
                     .map((n) => n[0])
                     .join('')
-                    .slice(0, 2);
+                    .slice(0, 2)
+                    .toUpperCase();
                   return (
                     <div key={comment.id} className="flex gap-3">
                       <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarFallback className="text-xs bg-primary/10">{initials}</AvatarFallback>
+                        <AvatarFallback className="text-xs bg-primary/10">
+                          {initials}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium">{comment.author?.full_name}</span>
+                          <span className="text-sm font-medium">{authorName}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatRelative(comment.created_at)}
                           </span>
@@ -538,6 +567,14 @@ export default function TaskDetailPage() {
         parentId={task.id}
         defaultType={task.type === 'GOAL' ? 'EPIC' : task.type === 'EPIC' ? 'TASK' : 'SUBTASK'}
       />
+
+      {canEdit && (
+        <TaskEditDialog
+          task={task}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+        />
+      )}
 
       {/* Delete confirmation */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

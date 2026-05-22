@@ -54,6 +54,8 @@ export interface TaskComment {
   author_id: string;
   body: string;
   created_at: string;
+  /** Flat author name returned by backend (preferred over nested `author`). */
+  author_name?: string | null;
   author?: User;
 }
 

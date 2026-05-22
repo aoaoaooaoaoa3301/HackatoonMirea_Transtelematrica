@@ -42,10 +42,10 @@ function StatCard({
   loading: boolean;
 }) {
   return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
+    <Card className="h-full">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             {loading ? (
               <>
                 <Skeleton className="h-4 w-24 mb-2" />
@@ -53,13 +53,13 @@ function StatCard({
               </>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">{title}</p>
-                <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{title}</p>
+                <p className={`text-2xl sm:text-3xl font-bold mt-0.5 sm:mt-1 ${color}`}>{value}</p>
               </>
             )}
           </div>
-          <div className={`rounded-lg bg-muted p-3 ${color}`}>
-            <Icon className="h-6 w-6" />
+          <div className={`rounded-lg bg-muted p-2 sm:p-3 shrink-0 ${color}`}>
+            <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
         </div>
       </CardContent>
@@ -97,7 +97,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Всего задач" value={overview?.total_tasks ?? 0} icon={ListTodo} color="text-primary" loading={overviewLoading} />
         <StatCard title="В работе" value={overview?.in_progress ?? 0} icon={PlayCircle} color="text-blue-600" loading={overviewLoading} />
         <StatCard title="Просрочено" value={overview?.overdue ?? 0} icon={Clock} color="text-rose-600" loading={overviewLoading} />
@@ -129,7 +129,7 @@ export default function AnalyticsPage() {
                       outerRadius={100}
                       paddingAngle={3}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                       labelLine={false}
                     >
                       {priorityData.map((entry, index) => (

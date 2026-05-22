@@ -105,7 +105,8 @@ export default function KanbanPage() {
         </Select>
 
         <div className="flex-1" />
-        <Button onClick={() => setDialogOpen(true)}>
+        {/* Topbar already provides a global create on mobile — avoid a duplicate "+" */}
+        <Button className="hidden sm:inline-flex" onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4 sm:mr-1" />
           <span className="hidden sm:inline">Создать</span>
         </Button>
