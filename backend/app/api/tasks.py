@@ -6,7 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from app.core.deps import get_db, get_current_user, require_task_access, apply_task_scope, can_delete_task
+from app.core.deps import (
+    get_db, get_current_user, require_task_access, apply_task_scope,
+    can_delete_task, visible_department_ids,
+)
 from app.models.task import Task, TaskComment
 from app.models.user import User
 from app.models.enums import TaskType, TaskPriority, TaskStatus, UserRole
@@ -121,6 +124,13 @@ def create_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # ── RBAC: only ADMIN and LEAD may create tasks/subtasks ──────────────
+    if current_user.role == UserRole.EMPLOYEE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Сотрудник не может создавать задачи",
+        )
+
     task_type = body.type or TaskType.TASK
     if body.parent_id:
         parent = require_task_access(body.parent_id, db, current_user)
@@ -132,6 +142,25 @@ def create_task(
         assignee = db.get(User, body.assignee_id)
         if assignee and assignee.department_id:
             dept_id = assignee.department_id
+
+    # LEAD may only create within their own department subtree and assign
+    # people from it. ADMIN is unrestricted (visible_department_ids → None).
+    if current_user.role == UserRole.LEAD:
+        allowed_depts = visible_department_ids(db, current_user)
+        if dept_id is None:
+            dept_id = current_user.department_id
+        if allowed_depts is not None and dept_id is not None and dept_id not in allowed_depts:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Руководитель может создавать задачи только в своём отделе",
+            )
+        if body.assignee_id:
+            a = db.get(User, body.assignee_id)
+            if a and a.department_id and allowed_depts is not None and a.department_id not in allowed_depts:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Можно назначать только сотрудников своего отдела",
+                )
 
     task = Task(
         id=uuid.uuid4(),
@@ -210,30 +239,39 @@ def update_task(
 ):
     task = require_task_access(task_id, db, current_user)
 
-    # RBAC: EMPLOYEE can only update status/progress on own tasks
+    # RBAC: EMPLOYEE may only change status/progress on tasks assigned to them.
     if current_user.role == UserRole.EMPLOYEE:
-        if task.assignee_id != current_user.id and task.assigned_department_id != current_user.department_id:
-            raise HTTPException(status_code=403, detail="Forbidden")
+        if task.assignee_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Можно изменять только свои задачи")
         allowed = {"status", "progress"}
         update_data = body.model_dump(exclude_unset=True)
         for key in list(update_data.keys()):
             if key not in allowed:
                 del update_data[key]
     elif current_user.role == UserRole.LEAD:
-        # Check dept access
-        from app.core.deps import _get_subdepartment_ids
-        if current_user.department_id:
-            dept_ids = _get_subdepartment_ids(db, current_user.department_id)
-            has_access = (
-                task.assigned_department_id in dept_ids
-                or task.assignee_id == current_user.id
-                or task.created_by_id == current_user.id
-            )
-        else:
-            has_access = task.assignee_id == current_user.id or task.created_by_id == current_user.id
+        # LEAD may edit tasks within their department subtree (or their own).
+        allowed_depts = visible_department_ids(db, current_user)
+        has_access = (
+            (allowed_depts is not None and task.assigned_department_id in allowed_depts)
+            or task.assignee_id == current_user.id
+            or task.created_by_id == current_user.id
+        )
         if not has_access:
             raise HTTPException(status_code=403, detail="Forbidden")
         update_data = body.model_dump(exclude_unset=True)
+        # …but may not move a task to another department, nor assign people
+        # outside their subtree.
+        if (
+            "assigned_department_id" in update_data
+            and update_data["assigned_department_id"] is not None
+            and allowed_depts is not None
+            and update_data["assigned_department_id"] not in allowed_depts
+        ):
+            raise HTTPException(status_code=403, detail="Можно переносить задачи только в свой отдел")
+        if "assignee_id" in update_data and update_data["assignee_id"]:
+            a = db.get(User, update_data["assignee_id"])
+            if a and a.department_id and allowed_depts is not None and a.department_id not in allowed_depts:
+                raise HTTPException(status_code=403, detail="Можно назначать только сотрудников своего отдела")
     else:
         update_data = body.model_dump(exclude_unset=True)
 

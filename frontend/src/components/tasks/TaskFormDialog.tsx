@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -42,6 +42,7 @@ import {
   PERIOD_LABELS,
   ALL_PERIOD_BUCKETS,
 } from '@/lib/statusUtils';
+import { useAuthStore } from '@/store/authStore';
 import type { CreateTaskPayload, AIAssigneeCandidate } from '@/types';
 
 const taskSchema = z.object({
@@ -73,6 +74,9 @@ export function TaskFormDialog({
   defaultType,
 }: TaskFormDialogProps) {
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  // A LEAD is locked to their own department; ADMIN may choose any.
+  const lockedDept = user?.role === 'LEAD' ? (user.department_id ?? null) : null;
   const [aiText, setAiText] = useState('');
   const [aiParsing, setAiParsing] = useState(false);
   const [candidates, setCandidates] = useState<AIAssigneeCandidate[]>([]);
@@ -91,6 +95,14 @@ export function TaskFormDialog({
       parent_id: parentId ?? '',
     },
   });
+
+  // Force a lead's tasks into their own department whenever the dialog opens.
+  useEffect(() => {
+    if (open && lockedDept) {
+      form.setValue('assigned_department_id', lockedDept);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, lockedDept]);
 
   const deptId = form.watch('assigned_department_id');
 
@@ -304,13 +316,14 @@ export function TaskFormDialog({
                       form.setValue('assignee_id', '');
                       setCandidates([]);
                     }}
+                    disabled={!!lockedDept}
                   >
                     <SelectTrigger className="mt-1.5">
                       <SelectValue placeholder="Выберите отдел" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="_none">Не выбран</SelectItem>
-                      {departments?.map((d) => (
+                      {!lockedDept && <SelectItem value="_none">Не выбран</SelectItem>}
+                      {(lockedDept ? departments?.filter((d) => d.id === lockedDept) : departments)?.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
                           {d.name}
                         </SelectItem>

@@ -19,10 +19,13 @@ import {
   ALL_TASK_TYPES,
   TASK_TYPE_LABELS,
 } from '@/lib/statusUtils';
+import { useAuthStore } from '@/store/authStore';
+import { canCreateTask } from '@/lib/permissions';
 import type { Status, TaskType } from '@/types';
 
 export default function KanbanPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
   const [departmentId, setDepartmentId] = useState<string>('');
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [taskType, setTaskType] = useState<string>('');
@@ -105,11 +108,13 @@ export default function KanbanPage() {
         </Select>
 
         <div className="flex-1" />
-        {/* Topbar already provides a global create on mobile — avoid a duplicate "+" */}
-        <Button className="hidden sm:inline-flex" onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 sm:mr-1" />
-          <span className="hidden sm:inline">Создать</span>
-        </Button>
+        {/* Only ADMIN/LEAD can create; topbar already has a global create on mobile */}
+        {canCreateTask(user) && (
+          <Button className="hidden sm:inline-flex" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Создать</span>
+          </Button>
+        )}
       </div>
 
       {/* Board */}

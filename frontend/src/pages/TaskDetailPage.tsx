@@ -60,7 +60,7 @@ import {
   TASK_EVENT_LABELS,
 } from '@/lib/statusUtils';
 import { formatDate, formatDateTime, formatRelative } from '@/lib/dateUtils';
-import { canDeleteTask, canEditTaskMeta } from '@/lib/permissions';
+import { canCreateTask, canDeleteTask, canEditTaskMeta } from '@/lib/permissions';
 import { useAuthStore } from '@/store/authStore';
 import type { TaskType, Status, Priority } from '@/types';
 
@@ -143,6 +143,7 @@ export default function TaskDetailPage() {
   const statusColor = STATUS_COLORS[task.status];
   const canEdit = canEditTaskMeta(currentUser, task);
   const canDelete = canDeleteTask(currentUser, task);
+  const canCreate = canCreateTask(currentUser);
   const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
   const departmentName = task.assigned_department_name ?? task.department?.name ?? null;
   const assigneeInitials = assigneeName
@@ -302,10 +303,12 @@ export default function TaskDetailPage() {
                   <CardTitle className="text-base">
                     Подзадачи ({task.children.length})
                   </CardTitle>
-                  <Button size="sm" variant="outline" onClick={() => setSubDialogOpen(true)}>
-                    <Plus className="mr-1 h-3 w-3" />
-                    Добавить
-                  </Button>
+                  {canCreate && (
+                    <Button size="sm" variant="outline" onClick={() => setSubDialogOpen(true)}>
+                      <Plus className="mr-1 h-3 w-3" />
+                      Добавить
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -318,7 +321,7 @@ export default function TaskDetailPage() {
             </Card>
           )}
 
-          {task.children?.length === 0 && task.type !== 'SUBTASK' && (
+          {task.children?.length === 0 && task.type !== 'SUBTASK' && canCreate && (
             <Card>
               <CardContent className="p-6 text-center">
                 <p className="text-sm text-muted-foreground mb-3">Нет подзадач</p>
@@ -504,7 +507,7 @@ export default function TaskDetailPage() {
               <Separator />
 
               {/* Create subtask */}
-              {task.type !== 'SUBTASK' && (
+              {task.type !== 'SUBTASK' && canCreate && (
                 <Button
                   variant="outline"
                   className="w-full"
