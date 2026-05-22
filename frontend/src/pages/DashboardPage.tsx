@@ -349,13 +349,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts + AI sidebar row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="lg:col-span-2 h-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
             {overviewLoading ? (
               <>
-                <Card><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
-                <Card><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
+                <Card className="h-full"><CardContent className="p-6 h-full"><Skeleton className="h-full min-h-64 w-full" /></CardContent></Card>
+                <Card className="h-full"><CardContent className="p-6 h-full"><Skeleton className="h-full min-h-64 w-full" /></CardContent></Card>
               </>
             ) : (
               <>
