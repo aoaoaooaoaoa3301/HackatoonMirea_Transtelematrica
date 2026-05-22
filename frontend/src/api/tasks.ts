@@ -20,6 +20,7 @@ export async function getTasks(filters?: TaskFilters): Promise<Task[]> {
     if (filters.due_before) params.due_before = filters.due_before;
     if (filters.due_after) params.due_after = filters.due_after;
     if (filters.parent_id) params.parent_id = filters.parent_id;
+    if (filters.ids?.length) params.ids = filters.ids.join(',');
   }
   const res = await apiClient.get<Task[]>('/tasks', { params });
   return res.data;

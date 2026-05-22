@@ -248,6 +248,7 @@ export interface TaskFilters {
   due_after?: string;
   parent_id?: string;
   period_bucket?: PeriodBucket;
+  ids?: string[];
 }
 
 export interface CreateTaskPayload {

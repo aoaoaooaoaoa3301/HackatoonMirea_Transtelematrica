@@ -336,6 +336,7 @@ def list_tasks(
     department_id: Optional[uuid.UUID] = None,
     assignee_id: Optional[uuid.UUID] = None,
     created_by_id: Optional[uuid.UUID] = None,
+    ids: Optional[str] = None,
     status_filter: Optional[str] = Query(None, alias="status"),
     priority_filter: Optional[str] = Query(None, alias="priority"),
     parent_id: Optional[str] = None,
@@ -363,6 +364,14 @@ def list_tasks(
         query = query.filter(Task.assignee_id == assignee_id)
     if created_by_id:
         query = query.filter(Task.created_by_id == created_by_id)
+    if ids:
+        # Explicit set of task ids (e.g. "show exactly the AI-flagged tasks").
+        # Still subject to apply_task_scope above, so RBAC is preserved.
+        try:
+            id_list = [uuid.UUID(x.strip()) for x in ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ids")
+        query = query.filter(Task.id.in_(id_list))
     if status_filter:
         statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
         query = query.filter(Task.status.in_(statuses))

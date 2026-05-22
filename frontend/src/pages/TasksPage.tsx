@@ -26,6 +26,7 @@ export default function TasksPage() {
   const paramStatus = searchParams.get('status');
   const paramPriority = searchParams.get('priority');
   const paramDept = searchParams.get('department_id');
+  const paramIds = searchParams.get('ids');
   const [tab, setTab] = useState<ViewTab>(
     paramTab === 'list' || paramTab === 'graph' || paramTab === 'strategy' ? paramTab : 'list'
   );
@@ -34,6 +35,7 @@ export default function TasksPage() {
     if (paramStatus) init.status = paramStatus.split(',') as Status[];
     if (paramPriority) init.priority = paramPriority.split(',') as Priority[];
     if (paramDept) init.department_id = paramDept;
+    if (paramIds) init.ids = paramIds.split(',');
     return init;
   });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');

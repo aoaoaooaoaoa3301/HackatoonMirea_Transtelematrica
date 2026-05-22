@@ -172,7 +172,9 @@ function AISidebarPanel() {
       description: highRisks.length > 0
         ? `Высокий риск: ${highRisks.slice(0, 2).map((r) => r.task_title).join(', ')}`
         : 'Проверьте задачи с высоким риском',
-      link: highRisks.length === 1 ? `/tasks/${highRisks[0].task_id}` : '/tasks?tab=list&status=OVERDUE',
+      link: highRisks.length === 1
+        ? `/tasks/${highRisks[0].task_id}`
+        : `/tasks?tab=list&ids=${highRisks.map((r) => r.task_id).join(',')}`,
     });
   }
 
@@ -184,7 +186,9 @@ function AISidebarPanel() {
       icon: Clock,
       title: `${medRisks.length} ${medRisks.length === 1 ? 'задача в зоне риска' : medRisks.length < 5 ? 'задачи в зоне риска' : 'задач в зоне риска'}`,
       description: medRisks.slice(0, 2).map((r) => r.task_title).join(', '),
-      link: '/tasks',
+      link: medRisks.length === 1
+        ? `/tasks/${medRisks[0].task_id}`
+        : `/tasks?tab=list&ids=${medRisks.map((r) => r.task_id).join(',')}`,
     });
   }
 
