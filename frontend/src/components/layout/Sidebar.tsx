@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
 import { ROLE_LABELS } from '@/lib/statusUtils';
+import ttmLogo from '@/assets/ttm-znak-blue.png';
 
 const navItems = [
   { path: '/', label: 'Дашборд', icon: LayoutDashboard, adminOnly: false },
@@ -64,6 +65,12 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
     .toUpperCase() ?? '?';
 
   const visibleNavItems = navItems.filter((item) => !item.adminOnly || user?.role === 'ADMIN');
+
+  const BrandLogo = () => (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-1">
+      <img src={ttmLogo} alt="Логотип Транстелематика" className="h-full w-full object-contain" />
+    </div>
+  );
 
   /** Shared navigation content used by both desktop sidebar and mobile drawer */
   function NavContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -148,10 +155,7 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
       >
         {/* Header */}
         <div className="flex h-14 items-center gap-3 border-b px-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold text-sm"
-               style={{ fontFamily: "'Golos Text', system-ui, sans-serif" }}>
-            T
-          </div>
+          <BrandLogo />
           {!collapsed && (
             <div className="flex flex-col overflow-hidden">
               <span className="text-sm font-semibold truncate" style={{ fontFamily: "'Golos Text', system-ui, sans-serif" }}>
@@ -249,10 +253,7 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
         <SheetContent side="left" className="w-72 p-0 flex flex-col">
           <SheetHeader className="px-4 py-3 border-b">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold text-sm"
-                   style={{ fontFamily: "'Golos Text', system-ui, sans-serif" }}>
-                T
-              </div>
+              <BrandLogo />
               <SheetTitle className="text-sm font-semibold" style={{ fontFamily: "'Golos Text', system-ui, sans-serif" }}>
                 Транстелематика
               </SheetTitle>
