@@ -32,6 +32,7 @@ import {
   PRIORITY_LABELS,
 } from '@/lib/statusUtils';
 import { toInputDate } from '@/lib/dateUtils';
+import { useAuthStore } from '@/store/authStore';
 import type { Task, TaskDetail, UpdateTaskPayload, Status, Priority } from '@/types';
 
 interface TaskEditDialogProps {
@@ -45,6 +46,9 @@ const NONE = '_none';
 
 export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps) {
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  // A LEAD is confined to their own department (matches backend enforcement).
+  const lockedDept = user?.role === 'LEAD' ? (user.department_id ?? null) : null;
 
   // ---- local form state, reset whenever `task` or `open` changes ----
   const [title, setTitle] = useState(task.title);
@@ -63,11 +67,12 @@ export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps
       setStatus(task.status);
       setPriority(task.priority);
       setAssigneeId(task.assignee_id ?? NONE);
-      setDepartmentId(task.assigned_department_id ?? NONE);
+      setDepartmentId(lockedDept ?? task.assigned_department_id ?? NONE);
       setDueDate(toInputDate(task.due_date));
       setProgress(task.progress);
     }
-  }, [open, task]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, task, lockedDept]);
 
   // ---- data for selects ----
   const { data: departments } = useQuery({
@@ -209,13 +214,14 @@ export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps
                   // keep a user from the wrong department selected.
                   setAssigneeId(NONE);
                 }}
+                disabled={!!lockedDept}
               >
                 <SelectTrigger className="mt-1.5">
                   <SelectValue placeholder="Выберите отдел" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>&mdash; Без отдела &mdash;</SelectItem>
-                  {departments?.map((d) => (
+                  {!lockedDept && <SelectItem value={NONE}>&mdash; Без отдела &mdash;</SelectItem>}
+                  {(lockedDept ? departments?.filter((d) => d.id === lockedDept) : departments)?.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.name}
                     </SelectItem>

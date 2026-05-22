@@ -86,6 +86,11 @@ def run_seed():
             ("prod.igor", "igor@ttm.local", "Игорь Семёнов", UserRole.EMPLOYEE, "Производство", ["сборка", "пайка", "qa"], "middle"),
             ("legal.sergey", "sergey.legal@ttm.local", "Сергей Волков", UserRole.EMPLOYEE, "Юридический отдел", ["договоры", "лицензирование"], "middle"),
             ("legal.maria", "maria.legal@ttm.local", "Мария Зотова", UserRole.EMPLOYEE, "Юридический отдел", ["комплаенс", "287-ФЗ"], "junior"),
+
+            # Memorable demo accounts shown on the login screen (so the roles
+            # can actually be tried: lead@ = Руководитель, user@ = Сотрудник).
+            ("demo.lead", "lead@ttm.local", "Олег Демидов", UserRole.LEAD, "Технический отдел", ["управление", "telematics", "архитектура"], "senior"),
+            ("demo.user", "user@ttm.local", "Степан Орехов", UserRole.EMPLOYEE, "Технический отдел", ["python", "qa"], "middle"),
         ]
 
         user_ids = {}
