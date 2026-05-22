@@ -27,7 +27,7 @@ export default function TasksPage() {
   const paramPriority = searchParams.get('priority');
   const paramDept = searchParams.get('department_id');
   const [tab, setTab] = useState<ViewTab>(
-    paramTab === 'list' || paramTab === 'graph' || paramTab === 'strategy' ? paramTab : 'strategy'
+    paramTab === 'list' || paramTab === 'graph' || paramTab === 'strategy' ? paramTab : 'list'
   );
   const [filters, setFilters] = useState<TFilters>(() => {
     const init: TFilters = {};
@@ -91,17 +91,17 @@ export default function TasksPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Tabs value={tab} onValueChange={(v) => setTab(v as ViewTab)}>
           <TabsList>
-            <TabsTrigger value="strategy" className="gap-1.5 sm:gap-2">
-              <Network className="h-4 w-4" />
-              <span className="hidden sm:inline">По целям</span>
+            <TabsTrigger value="list" className="gap-1.5 sm:gap-2">
+              <List className="h-4 w-4" />
+              <span className="hidden sm:inline">Список</span>
             </TabsTrigger>
             <TabsTrigger value="graph" className="gap-1.5 sm:gap-2">
               <GitBranch className="h-4 w-4" />
               <span className="hidden sm:inline">Граф</span>
             </TabsTrigger>
-            <TabsTrigger value="list" className="gap-1.5 sm:gap-2">
-              <List className="h-4 w-4" />
-              <span className="hidden sm:inline">Список</span>
+            <TabsTrigger value="strategy" className="gap-1.5 sm:gap-2">
+              <Network className="h-4 w-4" />
+              <span className="hidden sm:inline">По целям</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
