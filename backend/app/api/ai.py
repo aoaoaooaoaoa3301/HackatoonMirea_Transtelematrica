@@ -79,14 +79,15 @@ async def assistant_conversation(
     current_user: User = Depends(get_current_user),
 ):
     conversation, messages = assistant_agent.get_conversation_messages(db, current_user, conversation_id, channel="web")
+    available = await assistant_agent.check_llm_available()
     return {
         "conversation_id": conversation.id,
         "messages": [AssistantStoredMessage(id=item.id, role=item.role, content=item.content) for item in messages],
-        "mode": "degraded" if conversation.llm_status == "down" else "normal",
+        "mode": "normal" if available else "degraded",
         "model": {
             "provider": assistant_agent.settings.LLM_PROVIDER,
             "name": assistant_agent._model_name(),
-            "available": conversation.llm_status == "up",
+            "available": available,
         },
     }
 
@@ -125,14 +126,15 @@ async def assistant_clear_conversation(
     current_user: User = Depends(get_current_user),
 ):
     conversation = assistant_agent.clear_conversation(db, current_user, conversation_id, channel="web", external_chat_id="default")
+    available = await assistant_agent.check_llm_available()
     return {
         "conversation_id": conversation.id,
         "messages": [],
-        "mode": "degraded" if conversation.llm_status == "down" else "normal",
+        "mode": "normal" if available else "degraded",
         "model": {
             "provider": assistant_agent.settings.LLM_PROVIDER,
             "name": assistant_agent._model_name(),
-            "available": conversation.llm_status == "up",
+            "available": available,
         },
     }
 
