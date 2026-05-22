@@ -385,7 +385,7 @@ export default function TaskDetailPage() {
                             {formatRelative(comment.created_at)}
                           </span>
                           {canDeleteComment && !editing && (
-                            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="ml-auto flex items-center gap-1">
                               {isAuthor && (
                                 <button
                                   className="text-muted-foreground hover:text-foreground p-1"
