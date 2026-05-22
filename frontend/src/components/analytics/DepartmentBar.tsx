@@ -5,7 +5,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,14 +20,20 @@ interface DepartmentBarProps {
   data: DeptData[];
 }
 
+const legendItems = [
+  { label: 'Завершено', color: '#10B981' },
+  { label: 'В работе', color: '#3B82F6' },
+  { label: 'Просрочено', color: '#EF4444' },
+];
+
 export function DepartmentBar({ data }: DepartmentBarProps) {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-2 flex-none">
         <CardTitle className="text-base">Задачи по отделам</CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 relative min-h-[280px]">
-        <div className="absolute inset-0 pb-10 px-2 overflow-x-auto overflow-y-hidden">
+      <CardContent className="flex flex-1 flex-col min-h-[280px]">
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-2">
           <div className="min-w-[420px] h-full w-full py-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} layout="vertical" margin={{ left: 20, right: 20, top: 0, bottom: 0 }} barSize={16}>
@@ -59,20 +64,20 @@ export function DepartmentBar({ data }: DepartmentBarProps) {
                   }}
                   itemStyle={{ fontFamily: 'inherit' }}
                 />
-                <Legend 
-                  verticalAlign="bottom" 
-                  height={36} 
-                  iconType="circle"
-                  iconSize={8}
-                  formatter={(value) => <span className="text-[13px] font-medium text-muted-foreground mr-3">{value}</span>}
-                  wrapperStyle={{ bottom: 0, paddingBottom: 10 }}
-                />
                 <Bar dataKey="done" name="Завершено" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} opacity={0.9} className="hover:opacity-100 transition-opacity" />
                 <Bar dataKey="in_progress" name="В работе" stackId="a" fill="#3B82F6" opacity={0.9} className="hover:opacity-100 transition-opacity" />
                 <Bar dataKey="overdue" name="Просрочено" stackId="a" fill="#EF4444" radius={[0, 4, 4, 0]} opacity={0.9} className="hover:opacity-100 transition-opacity" />
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+        <div className="flex h-12 flex-none flex-wrap items-start justify-center gap-x-4 gap-y-1 pt-2">
+          {legendItems.map((entry) => (
+            <div key={entry.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span>{entry.label}</span>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
