@@ -9,12 +9,13 @@ from app.models.task import Task
 from app.models.department import Department
 from app.models.user import User
 from app.models.enums import TaskStatus, TaskPriority, TaskType
+from app.core.deps import apply_task_scope, scoped_user_query, visible_department_ids
 from app.services.task_service import compute_user_workload
 
 
-def get_overview(db: Session) -> dict:
+def get_overview(db: Session, current_user: User) -> dict:
     today = date.today()
-    tasks = db.query(Task).all()
+    tasks = apply_task_scope(db.query(Task), current_user, db).all()
     total = len(tasks)
 
     by_status = {}
@@ -42,7 +43,11 @@ def get_overview(db: Session) -> dict:
         if t.due_date and 0 < (t.due_date - today).days <= 3 and t.status != TaskStatus.DONE:
             at_risk_count += 1
 
-    departments = db.query(Department).all()
+    dept_scope = visible_department_ids(db, current_user)
+    dept_query = db.query(Department)
+    if dept_scope is not None:
+        dept_query = dept_query.filter(Department.id.in_(dept_scope or [None]))
+    departments = dept_query.all()
     by_department = []
     for dept in departments:
         dept_tasks = [t for t in tasks if t.assigned_department_id == dept.id]
@@ -78,8 +83,8 @@ def get_overview(db: Session) -> dict:
     }
 
 
-def get_workload_list(db: Session) -> list:
-    users = db.query(User).filter(User.active == True).all()
+def get_workload_list(db: Session, current_user: User) -> list:
+    users = scoped_user_query(db.query(User).filter(User.active == True), current_user, db).all()
     result = []
     for u in users:
         wl = compute_user_workload(db, u.id)
@@ -92,9 +97,9 @@ def get_workload_list(db: Session) -> list:
     return result
 
 
-def get_completion_buckets(db: Session, period: str = "month") -> list:
+def get_completion_buckets(db: Session, current_user: User, period: str = "month") -> list:
     today = date.today()
-    tasks = db.query(Task).all()
+    tasks = apply_task_scope(db.query(Task), current_user, db).all()
 
     def bucket_key(d: date) -> str:
         if period == "week":
@@ -129,11 +134,15 @@ def get_completion_buckets(db: Session, period: str = "month") -> list:
     return result
 
 
-def get_delegation_flow(db: Session) -> dict:
-    """Build sankey nodes + links: who created tasks for whom."""
-    tasks = db.query(Task).all()
-    users = db.query(User).filter(User.active == True).all()
-    departments = db.query(Department).all()
+def get_delegation_flow(db: Session, current_user: User) -> dict:
+    """Build sankey nodes + links: who created tasks for whom (role-scoped)."""
+    tasks = apply_task_scope(db.query(Task), current_user, db).all()
+    users = scoped_user_query(db.query(User).filter(User.active == True), current_user, db).all()
+    dept_scope = visible_department_ids(db, current_user)
+    dept_query = db.query(Department)
+    if dept_scope is not None:
+        dept_query = dept_query.filter(Department.id.in_(dept_scope or [None]))
+    departments = dept_query.all()
 
     user_map = {u.id: u for u in users}
     dept_map = {d.id: d for d in departments}

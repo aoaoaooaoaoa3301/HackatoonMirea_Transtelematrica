@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_user
@@ -163,6 +163,9 @@ async def ai_goal_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    goal_id = uuid.UUID(str(body.get("goal_id")))
+    try:
+        goal_id = uuid.UUID(str(body.get("goal_id")))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid goal_id")
     result = await ai_service.goal_summary(db, goal_id, current_user)
     return result

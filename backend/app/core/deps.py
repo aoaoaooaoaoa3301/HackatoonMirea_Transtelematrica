@@ -82,6 +82,49 @@ def apply_task_scope(query, current_user: User, db: Session):
     return query.filter(own_task_filter)
 
 
+def visible_department_ids(db: Session, current_user: User):
+    """Department IDs the user may see. None == all (ADMIN).
+
+    LEAD → their department subtree; EMPLOYEE → only their own department;
+    a user without a department → empty set.
+    """
+    if current_user.role == UserRole.ADMIN:
+        return None
+    if current_user.department_id is None:
+        return set()
+    if current_user.role == UserRole.LEAD:
+        return set(_get_subdepartment_ids(db, current_user.department_id))
+    return {current_user.department_id}
+
+
+def scoped_user_query(query, current_user: User, db: Session):
+    """Limit a User query to users the current user may see.
+
+    Mirrors task scoping: ADMIN → everyone, LEAD → their dept subtree,
+    EMPLOYEE → their own department; always includes the user themselves.
+    """
+    if current_user.role == UserRole.ADMIN:
+        return query
+    dept_ids = visible_department_ids(db, current_user)
+    if not dept_ids:
+        return query.filter(User.id == current_user.id)
+    return query.filter(or_(User.department_id.in_(dept_ids), User.id == current_user.id))
+
+
+def can_delete_task(db: Session, current_user: User, task: Task) -> bool:
+    """Delete matrix: ADMIN any task; LEAD tasks within their department
+    subtree; EMPLOYEE none. (Creator-based deletion was wrong — it let
+    employees delete and blocked leads on their own department's tasks.)"""
+    if current_user.role == UserRole.ADMIN:
+        return True
+    if current_user.role == UserRole.LEAD:
+        dept_ids = visible_department_ids(db, current_user)
+        if dept_ids and task.assigned_department_id in dept_ids:
+            return True
+        return task.created_by_id == current_user.id
+    return False
+
+
 def user_can_access_task(db: Session, current_user: User, task: Task) -> bool:
     if task is None:
         return False

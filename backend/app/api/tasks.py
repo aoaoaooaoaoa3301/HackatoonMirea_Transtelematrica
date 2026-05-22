@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from app.core.deps import get_db, get_current_user, require_task_access, apply_task_scope
+from app.core.deps import get_db, get_current_user, require_task_access, apply_task_scope, can_delete_task
 from app.models.task import Task, TaskComment
 from app.models.user import User
 from app.models.enums import TaskType, TaskPriority, TaskStatus, UserRole
@@ -97,7 +97,11 @@ def list_tasks(
         if parent_id == "null":
             query = query.filter(Task.parent_id.is_(None))
         else:
-            query = query.filter(Task.parent_id == uuid.UUID(parent_id))
+            try:
+                parent_uuid = uuid.UUID(parent_id)
+            except ValueError:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parent_id")
+            query = query.filter(Task.parent_id == parent_uuid)
     if q:
         pattern = f"%{q}%"
         query = query.filter(or_(Task.title.ilike(pattern), Task.description.ilike(pattern)))
@@ -282,8 +286,9 @@ def delete_task(
     current_user: User = Depends(get_current_user),
 ):
     task = require_task_access(task_id, db, current_user)
-    if current_user.role != UserRole.ADMIN and task.created_by_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    # ADMIN: any task · LEAD: tasks in their department subtree · EMPLOYEE: none.
+    if not can_delete_task(db, current_user, task):
+        raise HTTPException(status_code=403, detail="Недостаточно прав для удаления задачи")
     db.delete(task)
     db.commit()
 

@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, require_role
+from app.core.deps import get_db, get_current_user, require_role, visible_department_ids
 from app.models.department import Department
 from app.models.user import User
 from app.models.enums import UserRole
@@ -26,8 +26,12 @@ def _dept_out(d: Department) -> dict:
 
 @router.get("")
 def list_departments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    depts = db.query(Department).all()
-    return [_dept_out(d) for d in depts]
+    # ADMIN sees all departments; LEAD their subtree; EMPLOYEE their own.
+    query = db.query(Department)
+    scope = visible_department_ids(db, current_user)
+    if scope is not None:
+        query = query.filter(Department.id.in_(scope or [None]))
+    return [_dept_out(d) for d in query.all()]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

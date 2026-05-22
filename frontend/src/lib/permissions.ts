@@ -14,7 +14,11 @@ import type { User } from '@/types';
  *               manage the team
  */
 
-type TaskLike = { created_by_id?: string; assignee_id?: string | null };
+type TaskLike = {
+  created_by_id?: string;
+  assignee_id?: string | null;
+  assigned_department_id?: string | null;
+};
 
 export function isAdmin(user: User | null | undefined): boolean {
   return user?.role === 'ADMIN';
@@ -33,11 +37,24 @@ export function canCreateTask(user: User | null | undefined): boolean {
   return user?.role === 'ADMIN' || user?.role === 'LEAD';
 }
 
-/** Can delete a task — admin, or the person who created it. */
+/**
+ * Can delete a task. Matches the backend matrix:
+ *  - ADMIN    — any task
+ *  - LEAD     — tasks in their department (backend also allows the whole
+ *               subtree; the UI gates on the direct department, which is a
+ *               safe subset — backend is authoritative either way)
+ *  - EMPLOYEE — never
+ */
 export function canDeleteTask(user: User | null | undefined, task: TaskLike): boolean {
   if (!user) return false;
   if (user.role === 'ADMIN') return true;
-  return task.created_by_id === user.id;
+  if (user.role === 'LEAD') {
+    return (
+      (!!task.assigned_department_id && task.assigned_department_id === user.department_id) ||
+      task.created_by_id === user.id
+    );
+  }
+  return false;
 }
 
 /**
