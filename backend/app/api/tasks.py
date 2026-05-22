@@ -1,16 +1,20 @@
+import io
 import uuid
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from openpyxl import Workbook, load_workbook
 
 from app.core.deps import (
     get_db, get_current_user, require_task_access, apply_task_scope,
     can_delete_task, visible_department_ids,
 )
 from app.models.task import Task, TaskComment
+from app.models.department import Department
 from app.models.user import User
 from app.models.enums import TaskType, TaskPriority, TaskStatus, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, CommentCreate, CommentUpdate, TaskOut, TaskDetailOut
@@ -18,6 +22,56 @@ from app.services.task_service import (
     compute_period_bucket, infer_child_type, log_history,
     recompute_parent_progress, get_parent_chain, build_tree,
 )
+
+# ── RU ↔ Enum maps for Excel import / export ────────────────────────────
+
+_TYPE_RU: dict[TaskType, str] = {
+    TaskType.GOAL: "Цель",
+    TaskType.EPIC: "Эпик",
+    TaskType.TASK: "Задача",
+    TaskType.SUBTASK: "Подзадача",
+}
+_TYPE_FROM_LABEL: dict[str, TaskType] = {
+    v.lower(): k for k, v in _TYPE_RU.items()
+}
+_TYPE_FROM_LABEL.update({e.value.lower(): e for e in TaskType})
+
+_STATUS_RU: dict[TaskStatus, str] = {
+    TaskStatus.NEW: "Новая",
+    TaskStatus.IN_PROGRESS: "В работе",
+    TaskStatus.REVIEW: "Ревью",
+    TaskStatus.DONE: "Готово",
+    TaskStatus.OVERDUE: "Просрочена",
+}
+_STATUS_FROM_LABEL: dict[str, TaskStatus] = {
+    v.lower(): k for k, v in _STATUS_RU.items()
+}
+_STATUS_FROM_LABEL.update({e.value.lower(): e for e in TaskStatus})
+
+_PRIORITY_RU: dict[TaskPriority, str] = {
+    TaskPriority.LOW: "Низкий",
+    TaskPriority.MEDIUM: "Средний",
+    TaskPriority.HIGH: "Высокий",
+    TaskPriority.CRITICAL: "Критический",
+}
+_PRIORITY_FROM_LABEL: dict[str, TaskPriority] = {
+    v.lower(): k for k, v in _PRIORITY_RU.items()
+}
+_PRIORITY_FROM_LABEL.update({e.value.lower(): e for e in TaskPriority})
+
+# Header synonyms (lower-cased) → canonical key
+_HEADER_SYNONYMS: dict[str, str] = {
+    "тип": "type", "type": "type",
+    "название": "title", "title": "title",
+    "описание": "description", "description": "description",
+    "статус": "status", "status": "status",
+    "приоритет": "priority", "priority": "priority",
+    "отдел": "department", "department": "department",
+    "исполнитель": "assignee", "assignee": "assignee",
+    "дата начала": "start_date", "start_date": "start_date",
+    "срок": "due_date", "due_date": "due_date",
+    "прогресс": "progress", "progress": "progress",
+}
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -46,6 +100,224 @@ def _task_out(t: Task) -> dict:
         "created_at": t.created_at,
         "updated_at": t.updated_at,
     }
+
+
+###############################################################################
+# Excel export / import
+###############################################################################
+
+_EXPORT_HEADERS = [
+    "Тип", "Название", "Описание", "Статус", "Приоритет",
+    "Отдел", "Исполнитель", "Дата начала", "Срок", "Прогресс",
+]
+
+
+@router.get("/export")
+def export_tasks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tasks = apply_task_scope(db.query(Task), current_user, db).order_by(Task.created_at.desc()).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Задачи"
+    ws.append(_EXPORT_HEADERS)
+
+    for t in tasks:
+        ws.append([
+            _TYPE_RU.get(t.type, t.type.value if t.type else ""),
+            t.title,
+            t.description or "",
+            _STATUS_RU.get(t.status, t.status.value if t.status else ""),
+            _PRIORITY_RU.get(t.priority, t.priority.value if t.priority else ""),
+            t.assigned_department.name if t.assigned_department else "",
+            t.assignee.full_name if t.assignee else "",
+            t.start_date.isoformat() if t.start_date else "",
+            t.due_date.isoformat() if t.due_date else "",
+            t.progress,
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="tasks.xlsx"'},
+    )
+
+
+def _parse_date(value) -> Optional[date]:
+    """Accept a date/datetime cell or an ISO-ish string."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    s = str(value).strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+@router.post("/import")
+def import_tasks(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # RBAC: EMPLOYEE forbidden
+    if current_user.role == UserRole.EMPLOYEE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Сотрудник не может импортировать задачи",
+        )
+
+    # Pre-load lookup caches
+    dept_by_name: dict[str, Department] = {
+        d.name.lower(): d for d in db.query(Department).all()
+    }
+    user_by_name: dict[str, User] = {
+        u.full_name.lower(): u for u in db.query(User).all()
+    }
+    user_by_email: dict[str, User] = {
+        u.email.lower(): u for u in db.query(User).all()
+    }
+
+    allowed_depts = visible_department_ids(db, current_user)  # None for ADMIN
+
+    try:
+        wb = load_workbook(filename=io.BytesIO(file.file.read()), data_only=True)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не удалось прочитать файл как .xlsx",
+        )
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {"created": 0, "skipped": 0, "errors": []}
+
+    # Build header map (row 0)
+    raw_headers = rows[0]
+    col_map: dict[str, int] = {}
+    for idx, h in enumerate(raw_headers):
+        if h is None:
+            continue
+        key = _HEADER_SYNONYMS.get(str(h).strip().lower())
+        if key and key not in col_map:
+            col_map[key] = idx
+
+    def cell(row_data, key: str):
+        idx = col_map.get(key)
+        if idx is None or idx >= len(row_data):
+            return None
+        v = row_data[idx]
+        if isinstance(v, str):
+            v = v.strip()
+        return v if v != "" else None
+
+    created = 0
+    skipped = 0
+    errors: list[dict] = []
+
+    for row_num, row_data in enumerate(rows[1:], start=2):
+        title = cell(row_data, "title")
+        if not title:
+            skipped += 1
+            errors.append({"row": row_num, "message": "Пропущено: отсутствует название"})
+            continue
+
+        # Type
+        raw_type = cell(row_data, "type")
+        task_type = _TYPE_FROM_LABEL.get(str(raw_type).lower()) if raw_type else TaskType.TASK
+        if task_type is None:
+            task_type = TaskType.TASK
+
+        # Status
+        raw_status = cell(row_data, "status")
+        task_status = _STATUS_FROM_LABEL.get(str(raw_status).lower()) if raw_status else TaskStatus.NEW
+        if task_status is None:
+            task_status = TaskStatus.NEW
+
+        # Priority
+        raw_priority = cell(row_data, "priority")
+        task_priority = _PRIORITY_FROM_LABEL.get(str(raw_priority).lower()) if raw_priority else TaskPriority.MEDIUM
+        if task_priority is None:
+            task_priority = TaskPriority.MEDIUM
+
+        # Department
+        raw_dept = cell(row_data, "department")
+        dept: Optional[Department] = None
+        if raw_dept:
+            dept = dept_by_name.get(str(raw_dept).lower())
+            if dept is None:
+                skipped += 1
+                errors.append({"row": row_num, "message": f"Отдел не найден: {raw_dept}"})
+                continue
+
+        dept_id = dept.id if dept else None
+
+        # LEAD RBAC: department must be within visible subtree
+        if current_user.role == UserRole.LEAD:
+            if dept_id is not None and allowed_depts is not None and dept_id not in allowed_depts:
+                skipped += 1
+                errors.append({"row": row_num, "message": f"Нет доступа к отделу: {raw_dept}"})
+                continue
+            if dept_id is None:
+                dept_id = current_user.department_id
+
+        # Assignee
+        raw_assignee = cell(row_data, "assignee")
+        assignee: Optional[User] = None
+        if raw_assignee:
+            key = str(raw_assignee).lower()
+            assignee = user_by_name.get(key) or user_by_email.get(key)
+
+        # Dates
+        start_dt = _parse_date(cell(row_data, "start_date"))
+        due_dt = _parse_date(cell(row_data, "due_date"))
+
+        # Progress
+        raw_progress = cell(row_data, "progress")
+        progress = 0
+        if raw_progress is not None:
+            try:
+                progress = max(0, min(100, int(float(str(raw_progress)))))
+            except (ValueError, TypeError):
+                progress = 0
+
+        task = Task(
+            id=uuid.uuid4(),
+            type=task_type,
+            title=str(title),
+            description=cell(row_data, "description") or None,
+            start_date=start_dt,
+            due_date=due_dt,
+            priority=task_priority,
+            status=task_status,
+            progress=progress,
+            assigned_department_id=dept_id,
+            assignee_id=assignee.id if assignee else None,
+            created_by_id=current_user.id,
+        )
+        db.add(task)
+        db.flush()
+
+        log_history(db, task.id, "created", current_user.id, {"title": task.title, "type": task.type.value})
+        created += 1
+
+    db.commit()
+    return {"created": created, "skipped": skipped, "errors": errors}
 
 
 @router.get("/tree")

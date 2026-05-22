@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { LayoutGrid, List, Plus, Inbox, Network, GitBranch } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { LayoutGrid, List, Plus, Inbox, Network, GitBranch, Download, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,7 +11,7 @@ import { TaskFilters } from '@/components/tasks/TaskFilters';
 import { TaskFormDialog } from '@/components/tasks/TaskFormDialog';
 import { TaskStrategyView } from '@/components/tasks/TaskStrategyView';
 import { TaskGraphView } from '@/components/tasks/TaskGraphView';
-import { getTasks } from '@/api/tasks';
+import { getTasks, exportTasks, importTasks } from '@/api/tasks';
 import { useAuthStore } from '@/store/authStore';
 import { canCreateTask } from '@/lib/permissions';
 import type { TaskFilters as TFilters, Status, Priority } from '@/types';
@@ -37,6 +38,38 @@ export default function TasksPage() {
   });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = async () => {
+    try {
+      await exportTasks();
+      toast.success('Файл экспортирован');
+    } catch {
+      toast.error('Ошибка экспорта');
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await importTasks(file);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (result.errors.length > 0) {
+        toast.warning(`Импортировано: ${result.created}, пропущено: ${result.skipped}`, {
+          description: result.errors.slice(0, 5).map((err) => `Строка ${err.row}: ${err.message}`).join('\n'),
+          duration: 8000,
+        });
+      } else {
+        toast.success(`Импортировано: ${result.created} задач`);
+      }
+    } catch {
+      toast.error('Ошибка импорта');
+    } finally {
+      e.target.value = '';
+    }
+  };
 
   // Strategy + graph tabs always fetch the full set (ignore filters — structure is the value)
   const { data: allTasks, isLoading: isLoadingAll } = useQuery({
@@ -72,12 +105,33 @@ export default function TasksPage() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        {canCreateTask(user) && (
-          <Button className="hidden sm:inline-flex" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Создать</span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Экспорт</span>
           </Button>
-        )}
+          {canCreateTask(user) && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Импорт</span>
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={handleImport}
+              />
+            </>
+          )}
+          {canCreateTask(user) && (
+            <Button className="hidden sm:inline-flex" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Создать</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Strategy view: grouped by GOAL with delegation flow */}

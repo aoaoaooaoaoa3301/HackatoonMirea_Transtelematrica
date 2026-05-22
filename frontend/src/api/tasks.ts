@@ -64,3 +64,32 @@ export async function getTaskTree(rootId?: string): Promise<Task[]> {
   const res = await apiClient.get<Task[]>('/tasks/tree', { params });
   return res.data;
 }
+
+// ── Excel import / export ────────────────────────────────────────────────
+
+export async function exportTasks(): Promise<void> {
+  const res = await apiClient.get('/tasks/export', { responseType: 'blob' });
+  const url = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tasks.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export interface ImportResult {
+  created: number;
+  skipped: number;
+  errors: { row: number; message: string }[];
+}
+
+export async function importTasks(file: File): Promise<ImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await apiClient.post<ImportResult>('/tasks/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}
