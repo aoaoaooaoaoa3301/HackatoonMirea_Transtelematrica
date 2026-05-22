@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getTelegramStatus, startTelegramLink, type TelegramLinkCode } from '@/api/telegram';
 import { queryClient } from '@/lib/queryClient';
 
+const TELEGRAM_BOT_URL = 'https://t.me/TRANSTELEMATIKAAIASSISTANT_BOT';
+
 export default function TelegramPage() {
   const statusQuery = useQuery({
     queryKey: ['telegram-status'],
@@ -32,6 +34,45 @@ export default function TelegramPage() {
           Подключение Telegram к текущему аккаунту для команд AI-помощника.
         </p>
       </div>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <QrCode data-icon="inline-start" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <CardTitle>QR-код Telegram-бота</CardTitle>
+              <CardDescription>Отсканируйте код или откройте бота по ссылке.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex w-full max-w-72 justify-center rounded-lg bg-white p-4">
+            <QRCodeSVG
+              value={TELEGRAM_BOT_URL}
+              size={224}
+              level="M"
+              includeMargin
+              aria-label="QR-код Telegram-бота @TRANSTELEMATIKAAIASSISTANT_BOT"
+            />
+          </div>
+          <div className="flex flex-1 flex-col gap-3">
+            <div>
+              <p className="text-sm font-medium">@TRANSTELEMATIKAAIASSISTANT_BOT</p>
+              <p className="text-sm text-muted-foreground">
+                Используйте этот QR для быстрого перехода к боту в Telegram.
+              </p>
+            </div>
+            <a href={TELEGRAM_BOT_URL} target="_blank" rel="noopener noreferrer">
+              <Button className="w-full sm:w-auto">
+                <ExternalLink data-icon="inline-start" />
+                Открыть Telegram-бота
+              </Button>
+            </a>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="max-w-2xl">
         <CardHeader>

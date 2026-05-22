@@ -218,7 +218,7 @@ function AISidebarPanel() {
   }
 
   return (
-    <Card className="w-full flex flex-col">
+    <Card className="h-full w-full flex flex-col">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
@@ -349,13 +349,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts + AI sidebar row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="lg:col-span-2 h-full">
+          <div className="grid h-full grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {overviewLoading ? (
               <>
-                <Card><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
-                <Card><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
+                <Card className="h-full"><CardContent className="h-full min-h-64 p-6"><Skeleton className="h-full min-h-64 w-full" /></CardContent></Card>
+                <Card className="h-full"><CardContent className="h-full min-h-64 p-6"><Skeleton className="h-full min-h-64 w-full" /></CardContent></Card>
               </>
             ) : (
               <>
@@ -365,7 +365,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-        <div className="flex">
+        <div className="flex h-full">
           <AISidebarPanel />
         </div>
       </div>
