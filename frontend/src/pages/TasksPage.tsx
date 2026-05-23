@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LayoutGrid, List, Plus, Inbox, Network, GitBranch, Download, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TaskCard } from '@/components/tasks/TaskCard';
@@ -14,9 +16,94 @@ import { TaskGraphView } from '@/components/tasks/TaskGraphView';
 import { getTasks, exportTasks, importTasks } from '@/api/tasks';
 import { useAuthStore } from '@/store/authStore';
 import { canCreateTask } from '@/lib/permissions';
-import type { TaskFilters as TFilters, Status, Priority } from '@/types';
+import { formatDateShort } from '@/lib/dateUtils';
+import {
+  AT_RISK_STYLE,
+  STATUS_COLORS,
+  STATUS_LABELS,
+  isAtRisk,
+} from '@/lib/statusUtils';
+import { cn } from '@/lib/utils';
+import type { Task, TaskFilters as TFilters, Status, Priority } from '@/types';
 
 type ViewTab = 'strategy' | 'graph' | 'list';
+
+const PRIORITY_DOT_CLASSES: Record<Priority, string> = {
+  LOW: 'bg-slate-400',
+  MEDIUM: 'bg-sky-500',
+  HIGH: 'bg-orange-500',
+  CRITICAL: 'bg-red-500',
+};
+
+function getInitials(name: string | null | undefined): string {
+  if (!name) return '—';
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function TaskListTable({ tasks }: { tasks: Task[] }) {
+  return (
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="overflow-x-auto">
+        <div className="min-w-[760px]">
+          <div className="grid grid-cols-[minmax(280px,1.7fr)_minmax(150px,0.8fr)_86px_90px_132px] items-center border-b bg-muted/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="pl-7">Задача</span>
+            <span>Отдел</span>
+            <span className="text-center">Кто</span>
+            <span className="text-center">Срок</span>
+            <span className="text-center">Статус</span>
+          </div>
+
+          <div className="divide-y">
+            {tasks.map((task) => {
+              const assigneeName = task.assignee_name ?? task.assignee?.full_name ?? null;
+              const departmentName = task.assigned_department_name ?? task.department?.name ?? 'Без отдела';
+              const atRisk = isAtRisk(task.due_date, task.status);
+              const statusStyle = atRisk ? AT_RISK_STYLE : STATUS_COLORS[task.status];
+              const statusLabel = atRisk ? AT_RISK_STYLE.label : STATUS_LABELS[task.status];
+              return (
+                <Link
+                  key={task.id}
+                  to={`/tasks/${task.id}`}
+                  className="grid grid-cols-[minmax(280px,1.7fr)_minmax(150px,0.8fr)_86px_90px_132px] items-center px-4 py-3 text-sm transition-colors hover:bg-accent/40"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', PRIORITY_DOT_CLASSES[task.priority])} />
+                    <span className="min-w-0 truncate font-medium text-foreground">{task.title}</span>
+                  </div>
+
+                  <span className="truncate text-muted-foreground">{departmentName}</span>
+
+                  <div className="flex justify-center">
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback className="bg-primary text-[10px] font-semibold text-primary-foreground">
+                        {getInitials(assigneeName)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+
+                  <span className="text-center font-mono text-xs text-muted-foreground">
+                    {formatDateShort(task.due_date)}
+                  </span>
+
+                  <div className="flex justify-center">
+                    <Badge className={cn('border-0 px-2.5 py-0.5 text-[11px]', statusStyle.text, statusStyle.bg)}>
+                      {statusLabel}
+                    </Badge>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function TasksPage() {
   const user = useAuthStore((s) => s.user);
@@ -225,11 +312,7 @@ export default function TasksPage() {
                 ))}
               </div>
             ) : (
-              <div className="space-y-1">
-                {filteredTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} compact />
-                ))}
-              </div>
+              <TaskListTable tasks={filteredTasks} />
             )
           )}
         </>
