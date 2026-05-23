@@ -85,6 +85,7 @@ def telegram_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    bot_username = (settings.TELEGRAM_BOT_USERNAME or "").lstrip("@") or None
     account = (
         db.query(TelegramAccount)
         .filter(TelegramAccount.user_id == current_user.id, TelegramAccount.active == True)
@@ -92,12 +93,13 @@ def telegram_status(
         .first()
     )
     if not account:
-        return {"connected": False}
+        return {"connected": False, "bot_username": bot_username}
     return {
         "connected": True,
         "telegram_user_id": account.telegram_user_id,
         "telegram_username": account.telegram_username,
         "linked_at": account.linked_at,
+        "bot_username": bot_username,
     }
 
 

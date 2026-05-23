@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     TELEGRAM_INTERNAL_TOKEN: str = "change-me"
     TELEGRAM_LINK_CODE_TTL_MINUTES: int = 15
     # Bot @username (without @) — used to build t.me deep links / QR codes.
-    TELEGRAM_BOT_USERNAME: str = ""
+    TELEGRAM_BOT_USERNAME: str = "TranstelematikaAIassistant_bot"
     # Bot token for sending notifications (e.g. "123456:ABC-DEF...").
     # When empty/unset, Telegram notifications are silently skipped.
     TELEGRAM_BOT_TOKEN: str = ""

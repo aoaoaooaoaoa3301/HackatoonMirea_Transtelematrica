@@ -5,6 +5,7 @@ export interface TelegramStatus {
   telegram_user_id?: number;
   telegram_username?: string | null;
   linked_at?: string | null;
+  bot_username?: string | null;
 }
 
 export interface TelegramLinkCode {

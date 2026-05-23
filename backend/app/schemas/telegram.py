@@ -11,6 +11,7 @@ class TelegramStatusResponse(BaseModel):
     telegram_user_id: Optional[int] = None
     telegram_username: Optional[str] = None
     linked_at: Optional[datetime] = None
+    bot_username: Optional[str] = None
 
 
 class TelegramLinkStartResponse(BaseModel):

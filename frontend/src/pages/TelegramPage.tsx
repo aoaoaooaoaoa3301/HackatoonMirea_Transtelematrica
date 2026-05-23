@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getTelegramStatus, startTelegramLink, type TelegramLinkCode } from '@/api/telegram';
 import { queryClient } from '@/lib/queryClient';
 
+const DEFAULT_TELEGRAM_BOT_USERNAME = 'TranstelematikaAIassistant_bot';
+const DEFAULT_TELEGRAM_BOT_URL = `https://t.me/${DEFAULT_TELEGRAM_BOT_USERNAME}`;
+
 async function copyToClipboard(text: string) {
   try {
     if (navigator.clipboard?.writeText && window.isSecureContext) {
@@ -52,6 +55,11 @@ export default function TelegramPage() {
 
   const linkCode = linkMutation.data as TelegramLinkCode | undefined;
   const expiresAt = linkCode ? new Date(linkCode.expires_at).toLocaleString('ru-RU') : null;
+  const botUsername = statusQuery.data?.bot_username ?? linkCode?.bot_username ?? DEFAULT_TELEGRAM_BOT_USERNAME;
+  const botUrl = `https://t.me/${botUsername}`;
+  const personalLink = linkCode
+    ? linkCode.deep_link ?? `${botUrl}?start=${encodeURIComponent(linkCode.code)}`
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -61,6 +69,46 @@ export default function TelegramPage() {
           Подключение Telegram к текущему аккаунту для команд AI-помощника.
         </p>
       </div>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <QrCode data-icon="inline-start" />
+            QR-код Telegram-бота
+          </CardTitle>
+          <CardDescription>Отсканируйте код, чтобы открыть бота в Telegram.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="w-fit rounded-lg bg-white p-4">
+            <QRCodeSVG
+              value={botUrl || DEFAULT_TELEGRAM_BOT_URL}
+              size={220}
+              level="M"
+              includeMargin
+              aria-label="QR-код Telegram-бота"
+            />
+          </div>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-sm text-muted-foreground">Ссылка на бота</span>
+              <a
+                href={botUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                @{botUsername}
+              </a>
+            </div>
+            <a href={botUrl} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" className="w-full sm:w-auto">
+                <ExternalLink data-icon="inline-start" />
+                Открыть бота
+              </Button>
+            </a>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="max-w-2xl">
         <CardHeader>
@@ -103,7 +151,7 @@ export default function TelegramPage() {
           ) : (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
-                Для привязки нужен персональный одноразовый код. Нажмите кнопку ниже и отсканируйте появившийся QR-код.
+                Для привязки нужен персональный одноразовый код. Откройте бота по QR-коду выше и отправьте команду /link с кодом.
               </p>
               <Button onClick={() => linkMutation.mutate()} disabled={linkMutation.isPending}>
                 {linkMutation.isPending ? <RefreshCw data-icon="inline-start" /> : <Link2 data-icon="inline-start" />}
@@ -112,30 +160,9 @@ export default function TelegramPage() {
 
               {linkCode && (
                 <div className="flex flex-col gap-4 rounded-md border p-4 sm:flex-row sm:items-start">
-                  {/* QR — scan to auto-link without typing the code.
-                      Shown only when the bot username is configured
-                      (otherwise deep_link is null → fall back to code). */}
-                  {linkCode.deep_link && (
-                    <div className="flex flex-col items-center gap-2 shrink-0">
-                      <div className="rounded-lg bg-white p-4">
-                        <QRCodeSVG
-                          value={linkCode.deep_link}
-                          size={220}
-                          level="M"
-                          includeMargin
-                          aria-label="Персональный QR-код для привязки Telegram"
-                        />
-                      </div>
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground text-center">
-                        <QrCode className="h-3 w-3" />
-                        Персональный QR для привязки аккаунта
-                      </span>
-                    </div>
-                  )}
-
                   <div className="flex flex-1 flex-col gap-3">
-                    {linkCode.deep_link && (
-                      <a href={linkCode.deep_link} target="_blank" rel="noopener noreferrer">
+                    {personalLink && (
+                      <a href={personalLink} target="_blank" rel="noopener noreferrer">
                         <Button className="w-full sm:w-auto">
                           <ExternalLink data-icon="inline-start" />
                           Открыть бота и подключить
