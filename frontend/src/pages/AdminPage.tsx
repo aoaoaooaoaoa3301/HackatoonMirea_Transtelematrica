@@ -437,34 +437,40 @@ export default function AdminPage() {
           <Card>
             <CardContent className="p-0">
               {/* Desktop table header */}
-              <div className="hidden sm:grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-2 border-b text-xs font-medium text-muted-foreground">
+              <div className="hidden sm:grid grid-cols-[minmax(180px,1.2fr)_minmax(240px,1fr)_140px_minmax(160px,0.7fr)_110px_44px] gap-4 items-center px-4 py-2 border-b text-xs font-medium text-muted-foreground">
                 <span>ФИО</span>
-                <span>Email</span>
-                <span>Роль</span>
-                <span>Отдел</span>
-                <span>Статус</span>
+                <span className="text-center">Email</span>
+                <span className="text-center">Роль</span>
+                <span className="text-center">Отдел</span>
+                <span className="text-center">Статус</span>
                 <span />
               </div>
               <div className="divide-y">
                 {users.map((u) => (
                   <div
                     key={u.id}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-2 sm:gap-4 items-center px-4 py-3 hover:bg-accent/30 transition-colors"
+                    className="grid grid-cols-1 sm:grid-cols-[minmax(180px,1.2fr)_minmax(240px,1fr)_140px_minmax(160px,0.7fr)_110px_44px] gap-2 sm:gap-4 items-center px-4 py-3 hover:bg-accent/30 transition-colors"
                   >
                     <span className="text-sm font-medium truncate">{u.full_name}</span>
-                    <span className="text-sm text-muted-foreground truncate">{u.email}</span>
-                    <Badge variant="secondary" className="w-fit text-xs">
-                      {ROLE_LABELS[u.role]}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground truncate max-w-[140px]">
+                    <span className="text-sm text-muted-foreground truncate sm:text-center">{u.email}</span>
+                    <div className="sm:flex sm:justify-center">
+                      <Badge variant="secondary" className="w-fit text-xs">
+                        {ROLE_LABELS[u.role]}
+                      </Badge>
+                    </div>
+                    <span className="text-sm text-muted-foreground truncate sm:text-center">
                       {u.department_name ?? 'Без отдела'}
                     </span>
-                    <Badge variant={u.active !== false ? 'default' : 'destructive'} className="w-fit text-xs">
-                      {u.active !== false ? 'Активен' : 'Отключён'}
-                    </Badge>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="sm:flex sm:justify-center">
+                      <Badge variant={u.active !== false ? 'default' : 'destructive'} className="w-fit text-xs">
+                        {u.active !== false ? 'Активен' : 'Отключён'}
+                      </Badge>
+                    </div>
+                    <div className="sm:flex sm:justify-center">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 {users.length === 0 && (
