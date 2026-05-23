@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/authStore';
 import { login } from '@/api/auth';
+import ttmLogo from '@/assets/ttm-znak-blue.png';
 
 const loginSchema = z.object({
   email: z.string().email('Введите корректный email'),
@@ -52,8 +53,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <Card className="shadow-lg">
           <CardHeader className="text-center pb-2">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-2xl shadow-md">
-              T
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-white p-2 shadow-md">
+              <img src={ttmLogo} alt="Логотип Транстелематика" className="h-full w-full object-contain" />
             </div>
             <h1 className="text-xl font-bold">Транстелематика</h1>
             <p className="text-sm text-muted-foreground">Система управления задачами</p>

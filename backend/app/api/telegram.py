@@ -131,14 +131,30 @@ def confirm_telegram_link(body: TelegramLinkConfirmRequest, db: Session = Depend
     now = datetime.utcnow()
     link_code = db.query(TelegramLinkCode).filter(TelegramLinkCode.code == body.code).first()
     if not link_code or link_code.used_at is not None:
-        raise HTTPException(status_code=400, detail="Link code is invalid or already used")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Код привязки не найден или уже использован. Получите новый код на этой же странице Telegram. "
+                "Если проект запущен из локального клона, Telegram-бот должен быть запущен в том же docker compose "
+                "и с отдельным токеном бота; один общий TELEGRAM_BOT_TOKEN нельзя использовать в нескольких клонах."
+            ),
+        )
     if link_code.expires_at < now:
-        raise HTTPException(status_code=400, detail="Link code expired")
+        raise HTTPException(status_code=400, detail="Код привязки истёк. Получите новый код на странице Telegram.")
 
     account = db.query(TelegramAccount).filter(TelegramAccount.telegram_user_id == body.telegram_user_id).first()
     if not account:
         account = TelegramAccount(telegram_user_id=body.telegram_user_id, user_id=link_code.user_id)
         db.add(account)
+    (
+        db.query(TelegramAccount)
+        .filter(
+            TelegramAccount.user_id == link_code.user_id,
+            TelegramAccount.telegram_user_id != body.telegram_user_id,
+            TelegramAccount.active == True,
+        )
+        .update({TelegramAccount.active: False}, synchronize_session=False)
+    )
     account.user_id = link_code.user_id
     account.telegram_username = body.username
     account.telegram_first_name = body.first_name
