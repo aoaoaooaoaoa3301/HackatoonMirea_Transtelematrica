@@ -1303,8 +1303,8 @@ export function TaskGraphView({ tasks }: { tasks: Task[] }) {
                 y={-10}
                 width={w}
                 height={h + 30}
-                fill={`${TYPE_ACCENT[type]}08`}
-                stroke={`${TYPE_ACCENT[type]}25`}
+                fill={`${TYPE_ACCENT[type]}24`}
+                stroke={`${TYPE_ACCENT[type]}70`}
                 strokeDasharray="2,4"
                 rx={8}
               />
